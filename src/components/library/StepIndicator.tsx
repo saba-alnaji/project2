@@ -1,10 +1,8 @@
 import { Check } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface Step {
   id: number;
   label: string;
-  icon?: React.ReactNode;
 }
 
 interface StepIndicatorProps {
@@ -14,40 +12,36 @@ interface StepIndicatorProps {
 
 export default function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
   return (
-    <div className="flex items-center justify-center gap-0 mb-8">
+    <div className="flex items-center justify-center gap-4 py-6">
       {steps.map((step, index) => {
-        const isDone = currentStep > step.id;
-        const isActive = currentStep === step.id;
-        const isPending = currentStep < step.id;
+        const stepNumber = index + 1;
+        const isActive = stepNumber === currentStep;
+        const isDone = stepNumber < currentStep;
 
         return (
-          <div key={step.id} className="flex items-center">
-            {/* Step circle */}
-            <div className="flex flex-col items-center">
-              <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300",
-                isDone && "step-done",
-                isActive && "step-active animate-pulse-ring",
-                isPending && "step-pending"
-              )}>
-                {isDone ? <Check className="w-5 h-5" /> : step.id}
-              </div>
-              <span className={cn(
-                "mt-2 text-xs font-medium whitespace-nowrap",
-                isActive && "text-primary font-semibold",
-                isPending && "text-muted-foreground",
-                isDone && "text-success"
-              )}>
-                {step.label}
-              </span>
+          <div key={step.id} className="flex items-center gap-4">
+
+            {/* circle */}
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-full font-bold
+              ${
+                isDone
+                  ? "bg-green-500 text-white"
+                  : isActive
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-300 text-gray-700"
+              }`}
+            >
+              {isDone ? <Check className="h-5 w-5" /> : stepNumber}
             </div>
 
-            {/* Connector */}
+            {/* line between steps */}
             {index < steps.length - 1 && (
-              <div className={cn(
-                "w-16 sm:w-24 h-0.5 mb-5 mx-1 transition-all duration-500",
-                currentStep > step.id ? "bg-success" : "bg-border"
-              )} />
+              <div
+                className={`w-10 h-1 ${
+                  stepNumber < currentStep ? "bg-green-500" : "bg-gray-300"
+                }`}
+              />
             )}
           </div>
         );

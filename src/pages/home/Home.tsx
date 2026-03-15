@@ -1,9 +1,6 @@
-import { BookPlus, BookOpen, Search, BarChart2, Trash2, QrCode, ArrowLeftRight, Clock, Users, RefreshCw } from "lucide-react";
+import { BookOpen, BarChart2, ArrowLeftRight, Clock, Users, RefreshCw } from "lucide-react";
 import libraryLogo from "@/assets/library-logo.png";
-
-interface HomePageProps {
-  onNavigate: (section: string) => void;
-}
+import { useNavigate } from "react-router-dom";
 
 const quickLinks = [
   {
@@ -56,35 +53,49 @@ const quickLinks = [
   },
 ];
 
-export default function HomePage({ onNavigate }: HomePageProps) {
+export default function Home() {
+
+  const navigate = useNavigate();
+
+  const routes: Record<string,string> = {
+    "new-subscription": "/subscription/new",
+    lend: "/loan",
+    return: "/return-loan",
+    "edit-subscription": "/subscription/edit",
+    "late-return": "/late-returns",
+    "general-reports": "/reports",
+  };
+
   return (
     <div className="animate-fade-in">
-      {/* Hero */}
+
       <div className="text-center mb-10 pt-4">
         <img
           src={libraryLogo}
           alt="شعار مكتبة بلدية طولكرم"
           className="w-24 h-24 mx-auto mb-5 rounded-full shadow-elevated object-cover border-4 border-white"
         />
+
         <h1 className="text-3xl md:text-4xl font-black text-foreground mb-2">
           مكتبة بلدية طولكرم العامة
         </h1>
+
         <p className="text-muted-foreground text-base md:text-lg">
           نظام إدارة المكتبة الشامل - إدارة الكتب والتقارير والبحث المتقدم
         </p>
       </div>
 
-      {/* Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-4xl mx-auto">
         {quickLinks.map(link => (
           <button
             key={link.id}
-            onClick={() => onNavigate(link.id)}
+            onClick={() => navigate(routes[link.id])}
             className={`group flex items-center gap-4 p-5 rounded-xl bg-card border border-border border-t-4 ${link.borderColor} shadow-card hover:shadow-elevated transition-all duration-200 hover:-translate-y-1 text-right`}
           >
             <div className={`w-12 h-12 rounded-xl ${link.iconBg} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
               <link.icon className="w-6 h-6 text-white" />
             </div>
+
             <div>
               <h3 className="text-foreground font-bold text-base">{link.label}</h3>
               <p className="text-muted-foreground text-xs mt-0.5">{link.description}</p>
@@ -92,6 +103,7 @@ export default function HomePage({ onNavigate }: HomePageProps) {
           </button>
         ))}
       </div>
+
     </div>
   );
 }
