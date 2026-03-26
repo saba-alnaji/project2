@@ -5,7 +5,7 @@ import StepIndicator from "@/components/library/StepIndicator";
 import SubscriberStep, { SubscriberFormData } from "@/components/library/SubscriberStep";
 import GuarantorCheckStep from "@/components/library/GuarantorCheckStep";
 import GuarantorFormStep from "@/components/library/GuarantorFormStep";
-import SubscriptionStep, { SubscriptionFormData } from "@/components/library/SubscriptionStep";
+import SubscriptionStep, { SubscriptionFormData, categoryToId, paymentMethodToId } from "@/components/library/SubscriptionStep";
 
 const steps = [
   { id: 1, label: "بيانات المشترك" },
@@ -53,8 +53,12 @@ export default function NewSubscriptionForm() {
   };
 
   // ================= رجوع =================
-  const handleGuarantorBack = () => {
+  const handleGuarantorBack = (currentFormValues?: any) => {
     if (isNewGuarantor) {
+      // حفظ القيم الحالية قبل الرجوع
+      if (currentFormValues) {
+        setGuarantorFormValues(currentFormValues);
+      }
       setIsNewGuarantor(false);
     } else {
       setCurrentStep(1);
@@ -105,8 +109,11 @@ export default function NewSubscriptionForm() {
           startDate: subscriptionData.start_date,
           endDate: subscriptionData.end_date,
           amount: parseFloat(subscriptionData.fee.toString()),
+          memberClassificationId: categoryToId[subscriptionData.category] ?? 1,
+          paymentMethodId: paymentMethodToId[subscriptionData.payment_method] ?? 1,
           receiptNumber: subscriptionData.receipt_number,
-          notes: subscriptionData.notes,
+          ledgerNumber: subscriptionData.book_number,
+          note: subscriptionData.notes || null,
         },
       };
 
@@ -161,7 +168,8 @@ export default function NewSubscriptionForm() {
               onGuarantorFound={handleGuarantorFound}
               onGuarantorNew={handleGuarantorNew}
               onBack={handleGuarantorBack}
-              previousGuarantor={guarantorData}
+              previousGuarantor={guarantorData || guarantorFormValues}
+              previousGuarantorIsNew={!!guarantorFormValues}
             />
           ) : (
             <GuarantorFormStep
