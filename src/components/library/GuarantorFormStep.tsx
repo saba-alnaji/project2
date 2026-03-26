@@ -1,242 +1,183 @@
-import { useState } from "react";
-import { Plus, X, UserCheck } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Plus, X, UserCheck, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface GuarantorFormData {
-  name: string;
-  name_en: string;
-  job: string;
-  address: string;
-  address_street: string;
-  address_town: string;
-  address_neighborhood: string;
-  mobile_numbers: string[];
-}
+const guarantorSchema = z.object({
+  national_id: z.string().min(1, "رقم الهوية مطلوب").regex(/^\d+$/, "أرقام فقط"),
+  first_name: z.string().min(1, "الاسم الأول مطلوب"),
+  father_name: z.string().min(1, "اسم الأب مطلوب"),
+  grandfather_name: z.string().min(1, "اسم الجد مطلوب"),
+  last_name: z.string().min(1, "اسم العائلة مطلوب"),
+  first_name_en: z.string().min(1, "الاسم بالإنجليزي مطلوب").regex(/^[A-Za-z\s]+$/, "أحرف إنجليزية فقط"),
+  last_name_en: z.string().min(1, "الاسم بالإنجليزي مطلوب").regex(/^[A-Za-z\s]+$/, "أحرف إنجليزية فقط"),
+  job: z.string().min(1, "الوظيفة مطلوبة"),
+  address_street: z.string().min(1, "الشارع مطلوب"),
+  address_town: z.string().min(1, "البلدة/القرية مطلوبة"),
+  address_neighborhood: z.string().min(1, "الحي مطلوب"),
+  mobile_numbers: z.array(z.string()).min(1, "أدخل رقم جوال واحد على الأقل"),
+});
 
-interface GuarantorFormStepProps {
-  nationalId: string;
-  onSubmit: (data: { name: string; job: string; address: string; mobile_numbers: string[] }) => void;
+type GuarantorFormData = z.infer<typeof guarantorSchema>;
+
+interface Props {
+  initialData?: Partial<GuarantorFormData> & Record<string, any>;
+  onNext: (data: any) => void;
   onBack: () => void;
 }
 
-export default function GuarantorFormStep({ nationalId, onSubmit, onBack }: GuarantorFormStepProps) {
-  const [form, setForm] = useState<GuarantorFormData>({
-    name: "",
-    name_en: "",
-    job: "",
-    address: "",
-    address_street: "",
-    address_town: "",
-    address_neighborhood: "",
-    mobile_numbers: [""],
+export default function GuarantorFormStep({ initialData, onNext, onBack }: Props) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    setValue,
+    getValues,
+  } = useForm<GuarantorFormData>({
+    resolver: zodResolver(guarantorSchema),
+    mode: "onTouched",
+    defaultValues: {
+      national_id: initialData?.national_id || "",
+      first_name: initialData?.first_name || "",
+      father_name: initialData?.father_name || "",
+      grandfather_name: initialData?.grandfather_name || "",
+      last_name: initialData?.last_name || "",
+      first_name_en: initialData?.first_name_en || "",
+      last_name_en: initialData?.last_name_en || "",
+      job: initialData?.job || "",
+      address_street: initialData?.address_street || "",
+      address_town: initialData?.address_town || "",
+      address_neighborhood: initialData?.address_neighborhood || "",
+      mobile_numbers: initialData?.mobile_numbers?.length ? initialData.mobile_numbers : [""],
+    },
   });
-  const [localNationalId, setLocalNationalId] = useState(nationalId);
-  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const addMobile = () => {
-    setForm(prev => ({ ...prev, mobile_numbers: [...prev.mobile_numbers, ""] }));
+  const mobile_numbers = watch("mobile_numbers") ?? [];
+
+  const updateMobile = (index: number, val: string) => {
+    const arr = [...(getValues("mobile_numbers") ?? [])];
+    arr[index] = val;
+    setValue("mobile_numbers", arr);
   };
 
-  const removeMobile = (index: number) => {
-    setForm(prev => ({
-      ...prev,
-      mobile_numbers: prev.mobile_numbers.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateMobile = (index: number, value: string) => {
-    setForm(prev => ({
-      ...prev,
-      mobile_numbers: prev.mobile_numbers.map((m, i) => (i === index ? value : m)),
-    }));
-  };
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    if (!form.name.trim()) newErrors.name = "اسم الكفيل مطلوب";
-    if (!form.mobile_numbers[0]?.trim()) newErrors.mobile = "رقم الموبايل مطلوب";
-    if (!localNationalId.trim()) newErrors.national_id = "رقم الهوية مطلوب";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = () => {
-    if (validate()) {
-      const fullAddress = [form.address_street, form.address_town, form.address_neighborhood].filter(Boolean).join(" - ");
-      onSubmit({
-        name: form.name,
-        job: form.job,
-        address: fullAddress,
-        mobile_numbers: form.mobile_numbers.filter(m => m.trim()),
-      });
-    }
-  };
-
-  const inputClass = (field: string) => cn(
-    "w-full px-4 py-3 rounded-xl border-2 text-base transition-all duration-200",
-    "bg-card text-foreground placeholder:text-muted-foreground",
-    "focus:outline-none focus:border-primary",
-    errors[field] ? "border-destructive" : "border-border"
-  );
+  const inputClass = (name: keyof GuarantorFormData) =>
+    cn(
+      "w-full px-4 py-3 rounded-xl border-2 text-base bg-card transition-all focus:outline-none focus:border-primary",
+      errors[name] ? "border-destructive" : "border-border"
+    );
 
   return (
     <div className="animate-fade-in">
-      <div className="text-center mb-6">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl gradient-accent flex items-center justify-center shadow-accent">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl gradient-primary flex items-center justify-center shadow-elevated">
           <UserCheck className="w-8 h-8 text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground mb-1">بيانات الكفيل الجديد</h2>
+        <h2 className="text-2xl font-bold text-foreground mb-2">بيانات الكفيل الجديد</h2>
+        <p className="text-muted-foreground">يرجى تعبئة كافة الحقول المطلوبة *</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* National ID */}
-        <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">
-            رقم هوية الكفيل <span className="text-destructive">*</span>
-          </label>
-          <input
-            type="text"
-            value={localNationalId}
-            onChange={e => setLocalNationalId(e.target.value)}
-            placeholder="رقم الهوية"
-            className={inputClass("national_id")}
-            dir="ltr"
-          />
-          {errors.national_id && <p className="text-destructive text-xs mt-1">{errors.national_id}</p>}
-        </div>
-
-        {/* Name */}
-        <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">
-            اسم الكفيل <span className="text-destructive">*</span>
-          </label>
-          <input
-            type="text"
-            value={form.name}
-            onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="الاسم الكامل للكفيل"
-            className={inputClass("name")}
-          />
-          {errors.name && <p className="text-destructive text-xs mt-1">{errors.name}</p>}
-        </div>
-
-        {/* English Name */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-semibold text-foreground mb-2">الاسم بالإنجليزية</label>
-          <input
-            type="text"
-            value={form.name_en}
-            onChange={e => setForm(prev => ({ ...prev, name_en: e.target.value }))}
-            placeholder="Full name in English"
-            className={inputClass("name_en")}
-            dir="ltr"
-          />
-        </div>
-
-        {/* Job */}
-        <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">الوظيفة</label>
-          <input
-            type="text"
-            value={form.job}
-            onChange={e => setForm(prev => ({ ...prev, job: e.target.value }))}
-            placeholder="الوظيفة الحالية"
-            className={inputClass("job")}
-          />
-        </div>
-
-        {/* Empty for alignment */}
-        <div className="hidden md:block" />
-
-        {/* Address - 3 fields */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-semibold text-foreground mb-2">عنوان الكفيل</label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              type="text"
-              value={form.address_street}
-              onChange={e => setForm(prev => ({ ...prev, address_street: e.target.value }))}
-              placeholder="الشارع"
-              className={inputClass("address_street")}
-            />
-            <input
-              type="text"
-              value={form.address_town}
-              onChange={e => setForm(prev => ({ ...prev, address_town: e.target.value }))}
-              placeholder="البلدة"
-              className={inputClass("address_town")}
-            />
-            <input
-              type="text"
-              value={form.address_neighborhood}
-              onChange={e => setForm(prev => ({ ...prev, address_neighborhood: e.target.value }))}
-              placeholder="الحي / المركز"
-              className={inputClass("address_neighborhood")}
-            />
+      <form onSubmit={handleSubmit((data) => onNext({ ...data, isNew: true }))}>
+        <div className="max-w-2xl mx-auto space-y-5">
+          {/* رقم الهوية */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">رقم الهوية *</label>
+            <input {...register("national_id")} className={inputClass("national_id")} dir="ltr" placeholder="أدخل رقم الهوية" />
+            {errors.national_id && <p className="text-destructive text-xs mt-1">{errors.national_id.message}</p>}
           </div>
-        </div>
 
-        {/* Mobile numbers */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-semibold text-foreground mb-2">
-            أرقام الموبايل <span className="text-destructive">*</span>
-          </label>
-          <div className="space-y-2">
-            {form.mobile_numbers.map((mobile, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <div className="flex-1 flex gap-2">
-                  <span className="px-3 py-3 bg-muted rounded-xl text-muted-foreground text-sm font-medium">+970</span>
+          {/* الوظيفة */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">الوظيفة *</label>
+            <input {...register("job")} className={inputClass("job")} placeholder="أدخل الوظيفة" />
+            {errors.job && <p className="text-destructive text-xs mt-1">{errors.job.message}</p>}
+          </div>
+
+          {/* الاسم بالعربي */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">الاسم بالعربي *</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <input {...register("first_name")} className={inputClass("first_name")} placeholder="الاسم الأول" />
+              <input {...register("father_name")} className={inputClass("father_name")} placeholder="اسم الأب" />
+              <input {...register("grandfather_name")} className={inputClass("grandfather_name")} placeholder="اسم الجد" />
+              <input {...register("last_name")} className={inputClass("last_name")} placeholder="اسم العائلة" />
+            </div>
+          </div>
+
+          {/* الاسم بالإنجليزي */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">الاسم بالإنجليزي *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input {...register("first_name_en")} className={inputClass("first_name_en")} dir="ltr" placeholder="First Name" />
+              <input {...register("last_name_en")} className={inputClass("last_name_en")} dir="ltr" placeholder="Last Name" />
+            </div>
+          </div>
+
+          {/* العنوان */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">العنوان بالتفصيل *</label>
+            <div className="grid grid-cols-3 gap-2">
+              <input {...register("address_street")} className={inputClass("address_street")} placeholder="الشارع" />
+              <input {...register("address_town")} className={inputClass("address_town")} placeholder="البلدة/القرية" />
+              <input {...register("address_neighborhood")} className={inputClass("address_neighborhood")} placeholder="الحي" />
+            </div>
+          </div>
+
+          {/* الجوال */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">أرقام الجوال *</label>
+            <div className="space-y-2">
+              {mobile_numbers.map((_, i) => (
+                <div key={i} className="flex gap-2 items-center">
                   <input
-                    type="tel"
-                    value={mobile}
-                    onChange={e => updateMobile(index, e.target.value)}
-                    placeholder="رقم الموبايل"
+                    value={mobile_numbers[i] || ""}
+                    onChange={(e) => updateMobile(i, e.target.value)}
+                    className={inputClass("mobile_numbers" as any)}
                     dir="ltr"
-                    className={cn(
-                      "flex-1 px-4 py-3 rounded-xl border-2 text-base transition-all duration-200",
-                      "bg-card text-foreground placeholder:text-muted-foreground",
-                      "focus:outline-none focus:border-primary",
-                      errors.mobile && index === 0 ? "border-destructive" : "border-border"
-                    )}
+                    placeholder="05xxxxxxxx"
                   />
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setValue("mobile_numbers", mobile_numbers.filter((_, idx) => idx !== i))}
+                      className="text-destructive"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {index > 0 && (
-                  <button
-                    onClick={() => removeMobile(index)}
-                    className="p-2.5 rounded-xl text-destructive border-2 border-destructive/20 hover:bg-destructive/10 transition-all"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-            {errors.mobile && <p className="text-destructive text-xs">{errors.mobile}</p>}
-            <button
-              onClick={addMobile}
-              className="flex items-center gap-2 text-primary text-sm font-medium hover:text-primary/80 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              إضافة رقم آخر
-            </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setValue("mobile_numbers", [...mobile_numbers, ""])}
+                className="text-primary text-xs flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> إضافة رقم
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Actions */}
-      <div className="flex gap-3 mt-8">
-        <button
-          onClick={onBack}
-          className="flex-1 py-3 rounded-xl border-2 border-border text-foreground font-semibold hover:bg-muted transition-all duration-200"
-        >
-          رجوع
-        </button>
-        <button
-          onClick={handleSubmit}
-          className="flex-2 flex-grow-[2] py-3 rounded-xl gradient-primary text-white font-bold shadow-card hover:shadow-elevated transition-all duration-200"
-        >
-          المتابعة لتفاصيل الاشتراك
-        </button>
-      </div>
+        {/* الأزرار */}
+        <div className="flex justify-between mt-8 max-w-2xl mx-auto">
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-6 py-3 rounded-xl border-2 border-border text-foreground font-semibold flex items-center gap-2 hover:bg-muted transition-all duration-200"
+          >
+            <ArrowRight className="w-5 h-5" />
+            السابق
+          </button>
+          <button
+            type="submit"
+            className="px-6 py-3 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 shadow-elevated hover:shadow-accent transition-all duration-200"
+          >
+            المتابعة للاشتراك
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

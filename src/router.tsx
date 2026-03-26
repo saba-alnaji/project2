@@ -13,9 +13,14 @@ import EditSubscriptionPage from "./pages/subscriptions/EditSubscriptionPage";
 import RenewSubscriptionPage from "./pages/subscriptions/RenewSubscriptionPage";
 import NotFound from "./pages/NotFound";
 import Home from "./pages/home/Home";
+import Login from "./pages/auth/Login"; // أضيفي هذا السطر
 
 
 const router = createBrowserRouter([
+  {
+    path: "/login", // مسار صفحة تسجيل الدخول
+    element: <Login />, // ستظهر بدون MainLayout
+  },
   {
     path: "/",
     element: <MainLayout />,

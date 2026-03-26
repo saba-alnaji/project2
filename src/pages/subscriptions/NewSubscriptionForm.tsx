@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle, Plus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import axios from "axios";
 import StepIndicator from "@/components/library/StepIndicator";
 import SubscriberStep, { SubscriberFormData } from "@/components/library/SubscriberStep";
 import GuarantorCheckStep from "@/components/library/GuarantorCheckStep";
@@ -13,158 +13,132 @@ const steps = [
   { id: 3, label: "تفاصيل الاشتراك" },
 ];
 
-type GuarantorMode = "check" | "form" | "existing";
-
-interface ExistingGuarantor {
-  id: string;
-  national_id: string;
-  name: string;
-  job?: string;
-  address?: string;
-  mobile_numbers?: string[];
-}
-
 export default function NewSubscriptionForm() {
   const [currentStep, setCurrentStep] = useState(1);
-  const [subscriberData, setSubscriberData] = useState<SubscriberFormData | null>(null);
-  const [guarantorMode, setGuarantorMode] = useState<GuarantorMode>("check");
-  const [newGuarantorNationalId, setNewGuarantorNationalId] = useState("");
-  const [existingGuarantor, setExistingGuarantor] = useState<ExistingGuarantor | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Step 1 done
+  const [subscriberData, setSubscriberData] = useState<SubscriberFormData | null>(null);
+  const [guarantorData, setGuarantorData] = useState<any>(null);
+  const [guarantorFormValues, setGuarantorFormValues] = useState<any>(null);
+  const [isNewGuarantor, setIsNewGuarantor] = useState(false);
+
+  // ================= Step 1 =================
   const handleSubscriberNext = (data: SubscriberFormData) => {
     setSubscriberData(data);
     setCurrentStep(2);
-    setGuarantorMode("check");
   };
 
-  // Guarantor found in DB
-  const handleGuarantorFound = (guarantor: ExistingGuarantor) => {
-    setExistingGuarantor(guarantor);
-    setGuarantorMode("existing");
+  // ================= Step 2 (موجود) =================
+  const handleGuarantorFound = (data: any) => {
+    setIsNewGuarantor(false);
+    setGuarantorData(data);
+    setGuarantorFormValues(null);
     setCurrentStep(3);
   };
 
-  // Guarantor not found → show form
+  // ================= Step 2 (جديد) =================
   const handleGuarantorNew = (nationalId: string) => {
-    setNewGuarantorNationalId(nationalId);
-    setGuarantorMode("form");
+    setIsNewGuarantor(true);
+    if (!guarantorFormValues) {
+      setGuarantorFormValues({ national_id: nationalId, mobile_numbers: [""] });
+    }
   };
 
-  // New guarantor form submitted
-  const handleGuarantorFormSubmit = (data: {
-    name: string;
-    job: string;
-    address: string;
-    mobile_numbers: string[];
-  }) => {
-    setExistingGuarantor({
-      id: "", // will be created on save
-      national_id: newGuarantorNationalId,
-      ...data,
-    });
+  // ================= فورم الكفيل =================
+  const handleGuarantorFormSubmit = (data: any) => {
+    setGuarantorData(data);
+    setGuarantorFormValues(data);
     setCurrentStep(3);
   };
 
-  // Final save
-  const handleSubscriptionSubmit = async (subData: SubscriptionFormData) => {
-    if (!subscriberData || !existingGuarantor) return;
+  // ================= رجوع =================
+  const handleGuarantorBack = () => {
+    if (isNewGuarantor) {
+      setIsNewGuarantor(false);
+    } else {
+      setCurrentStep(1);
+    }
+  };
+
+  // ================= Submit =================
+  const handleFinalSubmit = async (subscriptionData: SubscriptionFormData) => {
+    if (!subscriberData || !guarantorData) return;
+
     setLoading(true);
-
     try {
-      let guarantorId = existingGuarantor.id;
+      const token = localStorage.getItem("token");
 
-      // If new guarantor, insert first
-      if (!guarantorId) {
-        const { data: gData, error: gError } = await supabase
-          .from("guarantors")
-          .insert({
-            national_id: existingGuarantor.national_id,
-            name: existingGuarantor.name,
-            job: existingGuarantor.job || null,
-            address: existingGuarantor.address || null,
-            mobile_numbers: existingGuarantor.mobile_numbers || [],
-          })
-          .select("id")
-          .single();
+      const apiPayload = {
+        memberInfo: {
+          firstName: (subscriberData as any).first_name,
+          familyName: (subscriberData as any).last_name,
+          fatherName: (subscriberData as any).father_name,
+          grandfatherName: (subscriberData as any).grandfather_name,
+          firstNameEn: (subscriberData as any).first_name_en,
+          familyNameEn: (subscriberData as any).last_name_en,
+          birthDate: subscriberData.birth_date,
+          gender: subscriberData.gender,
+          idnumber: subscriberData.national_id,
+          memberNumber: subscriberData.subscriber_number,
+          job: subscriberData.job,
+          cityId: parseInt((subscriberData as any).cityId),
+          street: (subscriberData as any).address_street,
+          village: (subscriberData as any).address_town,
+          neighborhood: (subscriberData as any).address_neighborhood,
+          phoneNumbers: subscriberData.mobile_numbers.filter((m: string) => m.trim()),
+        },
+        guarantorInfo: {
+          firstName: guarantorData.first_name || guarantorData.name?.split(" ")[0] || "",
+          familyName: guarantorData.last_name || guarantorData.name?.split(" ").slice(-1)[0] || "",
+          fatherName: guarantorData.father_name || "",
+          grandfatherName: guarantorData.grandfather_name || "",
+          idnumber: guarantorData.national_id || guarantorData.idnumber,
+          job: guarantorData.job,
+          street: guarantorData.address_street || "",
+          village: guarantorData.address_town || guarantorData.village || "",
+          neighborhood: guarantorData.address_neighborhood || guarantorData.neighborhood || "",
+          phoneNumbers: guarantorData.mobile_numbers || guarantorData.phoneNumbers || [],
+        },
+        subscriptionInfo: {
+          subscriptionType: subscriptionData.type,
+          startDate: subscriptionData.start_date,
+          endDate: subscriptionData.end_date,
+          amount: parseFloat(subscriptionData.fee.toString()),
+          receiptNumber: subscriptionData.receipt_number,
+          notes: subscriptionData.notes,
+        },
+      };
 
-        if (gError) throw gError;
-        guarantorId = gData.id;
-      }
-
-      // Insert subscriber
-      const { data: sData, error: sError } = await supabase
-        .from("subscribers")
-        .insert({
-          subscriber_number: subscriberData.subscriber_number || null,
-          name: subscriberData.name,
-          birth_date: subscriberData.birth_date || null,
-          gender: subscriberData.gender || null,
-          national_id: subscriberData.national_id,
-          governorate: subscriberData.governorate || null,
-          job: subscriberData.job || null,
-          mobile_numbers: subscriberData.mobile_numbers,
-          address: subscriberData.address || null,
-          guarantor_id: guarantorId,
-        })
-        .select("id")
-        .single();
-
-      if (sError) throw sError;
-
-      // Insert subscription
-      const { error: subError } = await supabase
-        .from("subscriptions")
-        .insert({
-          subscriber_id: sData.id,
-          duration: subData.duration,
-          type: subData.type,
-          category: subData.category,
-          start_date: subData.start_date,
-          end_date: subData.end_date,
-          fee: subData.fee,
-          payment_method: subData.payment_method,
-          receipt_number: subData.receipt_number || null,
-          book_number: subData.book_number || null,
-          notes: subData.notes || null,
-        });
-
-      if (subError) throw subError;
+      await axios.post("https://localhost:8080/api/Subscription/create", apiPayload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       setSuccess(true);
-    } catch (err) {
-      console.error("Error saving subscription:", err);
-      alert("حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.");
+    } catch (error: any) {
+      alert("خطأ: " + (error.response?.data?.message || "مشكلة في السيرفر"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReset = () => {
-    setCurrentStep(1);
-    setSubscriberData(null);
-    setGuarantorMode("check");
-    setNewGuarantorNationalId("");
-    setExistingGuarantor(null);
-    setSuccess(false);
-  };
-
+  // ================= Success UI =================
   if (success) {
     return (
       <div className="text-center py-16 animate-fade-in">
         <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-success-bg flex items-center justify-center">
           <CheckCircle className="w-12 h-12 text-success" />
         </div>
-        <h2 className="text-3xl font-black text-foreground mb-3">تم الحفظ بنجاح!</h2>
-        <p className="text-muted-foreground text-lg mb-8">تم إنشاء الاشتراك الجديد بنجاح في النظام</p>
+        <h2 className="text-3xl font-black text-foreground mb-3">تم بنجاح</h2>
         <button
-          onClick={handleReset}
-          className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl gradient-primary text-white font-bold text-lg shadow-elevated hover:shadow-accent transition-all duration-200"
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 mx-auto shadow-elevated hover:shadow-accent transition-all duration-200"
         >
-          <Plus className="w-6 h-6" />
-          اشتراك جديد
+          <Plus className="w-5 h-5" />
+          إضافة جديد
         </button>
       </div>
     );
@@ -175,36 +149,33 @@ export default function NewSubscriptionForm() {
       <StepIndicator steps={steps} currentStep={currentStep} />
 
       <div className="bg-card rounded-2xl p-6 md:p-8 shadow-card border border-border">
+        {/* Step 1 */}
         {currentStep === 1 && (
-          <SubscriberStep onNext={handleSubscriberNext} />
+          <SubscriberStep onNext={handleSubscriberNext} initialData={subscriberData} />
         )}
 
-        {currentStep === 2 && guarantorMode === "check" && (
-          <GuarantorCheckStep
-            onGuarantorFound={handleGuarantorFound}
-            onGuarantorNew={handleGuarantorNew}
-          />
-        )}
+        {/* Step 2 */}
+        {currentStep === 2 &&
+          (!isNewGuarantor ? (
+            <GuarantorCheckStep
+              onGuarantorFound={handleGuarantorFound}
+              onGuarantorNew={handleGuarantorNew}
+              onBack={handleGuarantorBack}
+              previousGuarantor={guarantorData}
+            />
+          ) : (
+            <GuarantorFormStep
+              initialData={guarantorFormValues}
+              onNext={handleGuarantorFormSubmit}
+              onBack={handleGuarantorBack}
+            />
+          ))}
 
-        {currentStep === 2 && guarantorMode === "form" && (
-          <GuarantorFormStep
-            nationalId={newGuarantorNationalId}
-            onSubmit={handleGuarantorFormSubmit}
-            onBack={() => setGuarantorMode("check")}
-          />
-        )}
-
+        {/* Step 3 */}
         {currentStep === 3 && (
           <SubscriptionStep
-            onSubmit={handleSubscriptionSubmit}
-            onBack={() => {
-              setCurrentStep(2);
-              if (existingGuarantor?.id) {
-                setGuarantorMode("check");
-              } else {
-                setGuarantorMode("form");
-              }
-            }}
+            onSubmit={handleFinalSubmit}
+            onBack={() => setCurrentStep(2)}
             loading={loading}
           />
         )}
