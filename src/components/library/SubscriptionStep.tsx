@@ -2,28 +2,28 @@ import { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CreditCard, Save } from "lucide-react";
+import { UserCheck, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const subscriptionSchema = z.object({
-  duration: z.string().min(1, "مطلوب"),
-  type: z.string().min(1, "مطلوب"),
-  category: z.string().min(1, "مطلوب"),
-  start_date: z.string().min(1, "تاريخ البداية مطلوب"),
-  end_date: z.string().min(1, "تاريخ النهاية مطلوب"),
-  fee: z.number().min(0, "الرسوم يجب أن تكون 0 أو أكثر"),
-  payment_method: z.string().min(1, "طريقة الدفع مطلوبة"),
-  receipt_number: z.string().min(1, "رقم الوصل مطلوب"),
-  book_number: z.string().min(1, "رقم الدفتر مطلوب"),
-  notes: z.string().optional().default(""),
+  subscriptionType: z.string().min(1, "نوع الاشتراك مطلوب"),
+  memberClassificationId: z.coerce.number().min(1, "تصنيف المشترك مطلوب"),
+  startDate: z.string().min(1, "تاريخ البداية مطلوب"),
+  endDate: z.string().min(1, "تاريخ النهاية مطلوب"),
+  amount: z.coerce.number().min(0, "الرسوم يجب أن تكون 0 أو أكثر"),
+  paymentMethodId: z.coerce.number().min(1, "طريقة الدفع مطلوبة"),
+  receiptNumber: z.string().min(1, "رقم الوصل مطلوب"),
+  ledgerNumber: z.string().min(1, "رقم الدفتر مطلوب"),
+  note: z.string().optional().default(""),
 });
 
 export type SubscriptionFormData = z.infer<typeof subscriptionSchema>;
 
 interface SubscriptionStepProps {
   onSubmit: (data: SubscriptionFormData) => void;
-  onBack: () => void;
+  onBack: (currentValues: SubscriptionFormData) => void; // تم التعديل لإرسال القيم الحالية
   loading: boolean;
+  initialData?: SubscriptionFormData | null; // إضافة استقبال البيانات المحفوظة
 }
 
 const today = new Date().toISOString().split("T")[0];
@@ -33,58 +33,47 @@ const oneYearLater = (() => {
   return d.toISOString().split("T")[0];
 })();
 
-const feeByCategory: Record<string, number> = {
-  regular: 35,
-  student: 25,
-  employee: 35,
-  municipality_employee: 0,
+const feeByCategory: Record<number, number> = {
+  1: 35, // شخص
+  2: 25, // طالب
+  4: 0,  // موظف بلدية
 };
 
-const categoryToId: Record<string, number> = {
-  regular: 1,
-  student: 2,
-  employee: 3,
-  municipality_employee: 4,
-};
-
-const paymentMethodToId: Record<string, number> = {
-  cash: 1,
-  transfer: 2,
-  check: 3,
-};
-
-export { categoryToId, paymentMethodToId };
-
-export default function SubscriptionStep({ onSubmit, onBack, loading }: SubscriptionStepProps) {
+export default function SubscriptionStep({ onSubmit, onBack, loading, initialData }: SubscriptionStepProps) {
   const {
     control,
     handleSubmit,
     watch,
     setValue,
+    getValues, // نحتاجها لجلب القيم عند الضغط على "رجوع"
     formState: { errors },
   } = useForm<SubscriptionFormData>({
     resolver: zodResolver(subscriptionSchema),
-    defaultValues: {
-      duration: "annual",
-      type: "public_library",
-      category: "regular",
-      start_date: today,
-      end_date: oneYearLater,
-      fee: 35,
-      payment_method: "cash",
-      receipt_number: "",
-      book_number: "",
-      notes: "",
+    // استخدام البيانات المحفوظة إن وجدت، وإلا استخدام القيم الافتراضية
+    defaultValues: initialData || {
+      subscriptionType: "مكتبة عامة",
+      memberClassificationId: 1,
+      startDate: today,
+      endDate: oneYearLater,
+      amount: 35,
+      paymentMethodId: 1,
+      receiptNumber: "",
+      ledgerNumber: "",
+      note: "",
     },
   });
 
-  const category = watch("category");
-  const fee = watch("fee");
-  const type = watch("type");
+  const categoryId = watch("memberClassificationId");
+  const amount = watch("amount");
 
+  // منطق تحديث الرسوم بناءً على التصنيف
   useEffect(() => {
-    setValue("fee", feeByCategory[category] ?? 35);
-  }, [category, setValue]);
+    // نقوم بتحديث المبلغ تلقائياً فقط إذا لم تكن هناك بيانات محفوظة مسبقاً 
+    // (عشان لو رجع المستخدم ولقى سعره اللي عدله ما يرجع يصفر)
+    if (!initialData) {
+        setValue("amount", feeByCategory[categoryId] ?? 35);
+    }
+  }, [categoryId, setValue, initialData]);
 
   const inputClass = cn(
     "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
@@ -97,207 +86,189 @@ export default function SubscriptionStep({ onSubmit, onBack, loading }: Subscrip
   return (
     <div className="animate-fade-in">
       <div className="text-center mb-6">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl gradient-accent flex items-center justify-center shadow-accent">
-          <CreditCard className="w-8 h-8 text-white" />
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl gradient-primary flex items-center justify-center shadow-elevated">
+          <UserCheck className="w-8 h-8 text-white" />
         </div>
         <h2 className="text-2xl font-bold text-foreground mb-1">تفاصيل الاشتراك</h2>
-        <p className="text-muted-foreground text-sm">حدد نوع ومدة الاشتراك والرسوم</p>
+        <p className="text-muted-foreground text-sm">أدخل بيانات الاشتراك والتحصيل المالي</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Duration */}
+
+          {/* نوع الاشتراك - Select */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">مدة الاشتراك</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              نوع الاشتراك <span className="text-destructive">*</span>
+            </label>
             <Controller
-              name="duration"
+              name="subscriptionType"
               control={control}
               render={({ field }) => (
                 <select {...field} className={inputClass}>
-                  <option value="annual">سنوي</option>
-                  <option value="semi_annual">نصف سنوي</option>
-                  <option value="monthly">شهري</option>
+                  <option value="مكتبة عامة">مكتبة عامة</option>
+                  <option value="مكتبة أطفال">مكتبة أطفال</option>
                 </select>
               )}
             />
-            {errors.duration && <p className={errorClass}>{errors.duration.message}</p>}
+            {errors.subscriptionType && <p className={errorClass}>{errors.subscriptionType.message}</p>}
           </div>
 
-          {/* Type */}
+          {/* تصنيف المشترك - Select */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">نوع الاشتراك</label>
-            <div className="flex gap-2">
-              {[
-                { value: "public_library", label: "مكتبة عامة" },
-                { value: "children_library", label: "مكتبة أطفال" },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setValue("type", opt.value)}
-                  className={cn(
-                    "flex-1 py-3 rounded-xl border-2 font-medium text-sm transition-all duration-200",
-                    type === opt.value
-                      ? "gradient-primary text-white border-primary shadow-card"
-                      : "border-border text-foreground hover:border-primary/50"
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {errors.type && <p className={errorClass}>{errors.type.message}</p>}
-          </div>
-
-          {/* Category */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-foreground mb-2">تصنيف المشترك</label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {[
-                { value: "regular", label: "شخص", fee: "35 ₪" },
-                { value: "student", label: "طالب", fee: "25 ₪" },
-                { value: "municipality_employee", label: "موظف بلدية", fee: "مجاناً" },
-                
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setValue("category", opt.value)}
-                  className={cn(
-                    "py-3 px-2 rounded-xl border-2 font-medium text-sm transition-all duration-200 text-center",
-                    category === opt.value
-                      ? "gradient-primary text-white border-primary shadow-card"
-                      : "border-border text-foreground hover:border-primary/50"
-                  )}
-                >
-                  <div>{opt.label}</div>
-                  <div className={cn("text-xs mt-0.5", category === opt.value ? "text-white/80" : "text-muted-foreground")}>
-                    {opt.fee}
-                  </div>
-                </button>
-              ))}
-            </div>
-            {errors.category && <p className={errorClass}>{errors.category.message}</p>}
-          </div>
-
-          {/* Start Date */}
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">تاريخ بداية الاشتراك</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              تصنيف المشترك <span className="text-destructive">*</span>
+            </label>
             <Controller
-              name="start_date"
+              name="memberClassificationId"
               control={control}
               render={({ field }) => (
-                <input type="date" {...field} readOnly className={cn(inputClass, "bg-muted/50 cursor-not-allowed")} dir="ltr" />
+                <select
+                  className={inputClass}
+                  value={field.value}
+                  onChange={field.onChange}
+                >
+                  <option value={1}>شخص (35 ₪)</option>
+                  <option value={2}>طالب (25 ₪)</option>
+                  <option value={4}>موظف بلدية (مجاني)</option>
+                </select>
+              )}
+            />
+            {errors.memberClassificationId && <p className={errorClass}>{errors.memberClassificationId.message}</p>}
+          </div>
+
+          {/* التواريخ */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              تاريخ بداية الاشتراك <span className="text-destructive">*</span>
+            </label>
+            <Controller
+              name="startDate"
+              control={control}
+              render={({ field }) => (
+                <input type="date" {...field} className={inputClass} dir="ltr" />
               )}
             />
           </div>
 
-          {/* End Date */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">تاريخ نهاية الاشتراك</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              تاريخ نهاية الاشتراك <span className="text-destructive">*</span>
+            </label>
             <Controller
-              name="end_date"
+              name="endDate"
               control={control}
               render={({ field }) => (
-                <input type="date" {...field} readOnly className={cn(inputClass, "bg-muted/50 cursor-not-allowed")} dir="ltr" />
+                <input type="date" {...field} className={inputClass} dir="ltr" />
               )}
             />
           </div>
 
-          {/* Fee */}
+          {/* الرسوم */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">الرسوم (شيكل)</label>
             <div className="relative">
               <Controller
-                name="fee"
+                name="amount"
                 control={control}
                 render={({ field }) => (
                   <input
                     type="number"
                     {...field}
-                    onChange={e => field.onChange(Number(e.target.value))}
-                    className={cn(inputClass, "font-bold text-lg p-3")}
+                    onChange={(e) => field.onChange(Number(e.target.value))}
+                    className={cn(inputClass, "font-bold text-lg pr-10 pl-3")}
                     dir="ltr"
                   />
                 )}
               />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₪</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                ₪
+              </span>
             </div>
-            {errors.fee && <p className={errorClass}>{errors.fee.message}</p>}
           </div>
 
-          {/* Payment Method */}
+          {/* طريقة الدفع */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">طريقة الدفع</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              طريقة الدفع <span className="text-destructive">*</span>
+            </label>
             <Controller
-              name="payment_method"
+              name="paymentMethodId"
               control={control}
               render={({ field }) => (
-                <select {...field} className={inputClass}>
-                  <option value="cash">نقداً</option>
+                <select
+                  {...field}
+                  className={inputClass}
+                  onChange={field.onChange}
+                >
+                  <option value={1}>نقداً</option>
                 </select>
               )}
             />
-            {errors.payment_method && <p className={errorClass}>{errors.payment_method.message}</p>}
           </div>
 
-          {/* Receipt Number */}
+          {/* رقم الوصل */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">رقم الوصل <span className="text-destructive">*</span></label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              رقم الوصل <span className="text-destructive">*</span>
+            </label>
             <Controller
-              name="receipt_number"
+              name="receiptNumber"
               control={control}
               render={({ field }) => (
-                <input type="text" {...field} placeholder="رقم وصل الدفع" className={cn(inputClass, errors.receipt_number && "border-destructive")} dir="ltr" />
+                <input type="text" {...field} placeholder="أدخل رقم الوصل" className={inputClass} dir="ltr" />
               )}
             />
-            {errors.receipt_number && <p className={errorClass}>{errors.receipt_number.message}</p>}
+            {errors.receiptNumber && <p className={errorClass}>{errors.receiptNumber.message}</p>}
           </div>
 
-          {/* Book Number */}
+          {/* رقم الدفتر */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">رقم الدفتر <span className="text-destructive">*</span></label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              رقم الدفتر <span className="text-destructive">*</span>
+            </label>
             <Controller
-              name="book_number"
+              name="ledgerNumber"
               control={control}
               render={({ field }) => (
-                <input type="text" {...field} placeholder="رقم الدفتر" className={cn(inputClass, errors.book_number && "border-destructive")} dir="ltr" />
+                <input type="text" {...field} placeholder="أدخل رقم الدفتر" className={inputClass} dir="ltr" />
               )}
             />
-            {errors.book_number && <p className={errorClass}>{errors.book_number.message}</p>}
+            {errors.ledgerNumber && <p className={errorClass}>{errors.ledgerNumber.message}</p>}
           </div>
 
-          {/* Notes */}
+          {/* الملاحظات */}
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-foreground mb-2">ملاحظات</label>
             <Controller
-              name="notes"
+              name="note"
               control={control}
               render={({ field }) => (
-                <textarea {...field} placeholder="أي ملاحظات إضافية..." rows={3} className={cn(inputClass, "resize-none")} />
+                <textarea {...field} rows={2} placeholder="أضف ملاحظاتك هنا..." className={cn(inputClass, "resize-none")} />
               )}
             />
           </div>
         </div>
 
-        {/* Fee summary */}
+        {/* ملخص الرسوم */}
         <div className="mt-5 p-4 rounded-2xl bg-primary/5 border-2 border-primary/20 flex justify-between items-center">
-          <span className="text-foreground font-semibold">إجمالي الرسوم</span>
-          <span className="text-2xl font-black text-primary">{fee.toFixed(2)} ₪</span>
+          <span className="text-foreground font-semibold">المبلغ المستحق للدفع</span>
+          <span className="text-2xl font-black text-primary">{(amount || 0).toFixed(2)} ₪</span>
         </div>
 
+        {/* أزرار التحكم */}
         <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex-1 py-3 rounded-xl border-2 border-border text-foreground font-semibold hover:bg-muted transition-all duration-200"
+          <button 
+            type="button" 
+            onClick={() => onBack(getValues())} // إرسال القيم الحالية عند الرجوع
+            className="flex-1 py-3 rounded-xl border-2 border-border font-semibold hover:bg-muted transition-all"
           >
             رجوع
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex-grow-[2] py-3 rounded-xl gradient-primary text-white font-bold shadow-card hover:shadow-elevated transition-all duration-200 flex items-center justify-center gap-2 text-base"
+            className="flex-grow-[2] py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2 shadow-card hover:shadow-elevated transition-all"
           >
             <Save className="w-5 h-5" />
             {loading ? "جاري الحفظ..." : "حفظ الاشتراك"}

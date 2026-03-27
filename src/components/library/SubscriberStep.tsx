@@ -3,35 +3,29 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, X, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const cities = [
-  { id: 1, name: "أريحا والأغوار" }, { id: 2, name: "بيت لحم" },
-  { id: 3, name: "الخليل" }, { id: 4, name: "القدس" },
-  { id: 5, name: "دير البلح" }, { id: 6, name: "رفح" },
-  { id: 7, name: "سلفيت" }, { id: 8, name: "شمال غزة" },
-  { id: 9, name: "طوباس" }, { id: 10, name: "طولكرم" },
-  { id: 11, name: "غزة" }, { id: 12, name: "قلقيلية" },
-  { id: 13, name: "خان يونس" }, { id: 14, name: "نابلس" },
-  { id: 15, name: "جنين" }, { id: 16, name: "رام الله والبيرة" }
-];
+import { useEffect, useState } from "react";
+import axios from "axios";
 
 const subscriberSchema = z.object({
-  subscriber_number: z.string().min(1, "رقم المشترك مطلوب"),
-  first_name: z.string().min(1, "الاسم الأول مطلوب"),
-  father_name: z.string().min(1, "اسم الأب مطلوب"),
-  grandfather_name: z.string().min(1, "اسم الجد مطلوب"),
-  last_name: z.string().min(1, "اسم العائلة مطلوب"),
-  first_name_en: z.string().min(1, "الاسم بالإنجليزي مطلوب").regex(/^[A-Za-z\s]+$/, "أحرف إنجليزية فقط"),
-  last_name_en: z.string().min(1, "الاسم بالإنجليزي مطلوب").regex(/^[A-Za-z\s]+$/, "أحرف إنجليزية فقط"),
-  birth_date: z.string().min(1, "تاريخ الميلاد مطلوب"),
+  // required fields
+  memberNumber: z.string().min(1, "رقم المشترك مطلوب"),
+  idnumber: z.string().min(1, "رقم الهوية مطلوب").regex(/^\d+$/, "أرقام فقط"),
+  cityId: z.string().optional(),
+  firstName: z.string().min(1, "الاسم الأول مطلوب"),
+  fatherName: z.string().min(1, "اسم الأب مطلوب"),
+  grandfatherName: z.string().min(1, "اسم الجد مطلوب"),
+  familyName: z.string().min(1, "اسم العائلة مطلوب"),
   gender: z.string().min(1, "يرجى اختيار الجنس"),
-  national_id: z.string().min(1, "رقم الهوية مطلوب").regex(/^\d+$/, "أرقام فقط"),
-  cityId: z.string().min(1, "يرجى اختيار المحافظة"), 
   job: z.string().min(1, "الوظيفة مطلوبة"),
-  address_street: z.string().min(1, "الشارع مطلوب"),
-  address_town: z.string().min(1, "البلدة/القرية مطلوبة"),
-  address_neighborhood: z.string().min(1, "الحي مطلوب"),
-  mobile_numbers: z.array(z.string()).min(1, "أدخل رقم جوال واحد على الأقل"),
+  birthDate: z.string().min(1, "تاريخ الميلاد مطلوب"),
+
+  // optional fields (احذف required عنها)
+  firstNameEn: z.string().optional(),
+  familyNameEn: z.string().optional(),
+  street: z.string().optional(),
+  village: z.string().optional(),
+  neighborhood: z.string().optional(),
+  phoneNumbers: z.array(z.string()).optional(),
 });
 
 export type SubscriberFormData = z.infer<typeof subscriberSchema>;
@@ -41,29 +35,49 @@ interface SubscriberStepProps {
   initialData?: SubscriberFormData | null;
 }
 
+
 export default function SubscriberStep({ onNext, initialData }: SubscriberStepProps) {
+  const [apiCities, setApiCities] = useState<{ id: number, name: string }[]>([]);
+  useEffect(() => {
+  const fetchCities = async () => {
+    try {
+      // مع Axios، النتيجة بتيجي مباشرة في data
+      const response = await axios.get("https://localhost:8080/api/City");
+      setApiCities(response.data);
+    } catch (error) {
+      console.error("خطأ في جلب المدن باستخدام Axios:", error);
+    }
+  };
+  fetchCities();
+}, []);
+
   const { register, handleSubmit, formState: { errors }, watch, setValue, getValues } =
     useForm<SubscriberFormData>({
       resolver: zodResolver(subscriberSchema),
       mode: "onTouched",
       defaultValues: initialData || {
-        mobile_numbers: [""],
-        cityId: "",
+        phoneNumbers: [""],
+        cityId: "", // القيمة الابتدائية نص فارغ
       }
     });
 
-  const mobile_numbers = watch("mobile_numbers");
-  const addMobile = () => setValue("mobile_numbers", [...getValues("mobile_numbers"), ""]);
-  const removeMobile = (index: number) => setValue("mobile_numbers", getValues("mobile_numbers").filter((_, i) => i !== index));
+  const mobile_numbers = watch("phoneNumbers");
+  const addMobile = () => setValue("phoneNumbers", [...getValues("phoneNumbers"), ""]);
+  const removeMobile = (index: number) => setValue("phoneNumbers", getValues("phoneNumbers").filter((_, i) => i !== index));
   const updateMobile = (index: number, value: string) => {
-    const updated = [...getValues("mobile_numbers")];
+    const updated = [...getValues("phoneNumbers")];
     updated[index] = value;
-    setValue("mobile_numbers", updated);
+    setValue("phoneNumbers", updated);
   };
 
   const onSubmit = (data: SubscriberFormData) => {
-    onNext(data); // فقط نمرر البيانات للأب بدون إرسال API هنا
+  const formattedData = {...data, cityId: data.cityId ? parseInt(data.cityId, 10) : null,
+        phoneNumbers: data.phoneNumbers?.filter(num => num.trim() !== "")
   };
+
+  console.log("البيانات الجاهزة للإرسال:", formattedData);
+  onNext(formattedData as any); 
+};
 
   const inputClass = (fieldName: keyof SubscriberFormData) => cn(
     "w-full px-4 py-3 rounded-xl border-2 text-base transition-all bg-card",
@@ -82,50 +96,54 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-          
+
           <div>
             <label className="font-semibold mb-2 block">رقم المشترك <span className="text-destructive">*</span></label>
-            <input {...register("subscriber_number")} className={inputClass("subscriber_number")} dir="ltr" />
-            {errors.subscriber_number && <p className="text-destructive text-[11px] mt-1">{errors.subscriber_number.message}</p>}
+            <input {...register("memberNumber")} className={inputClass("memberNumber")} dir="ltr" />
+            {errors.memberNumber && <p className="text-destructive text-[11px] mt-1">{errors.memberNumber.message}</p>}
           </div>
 
           <div>
             <label className="font-semibold mb-2 block">رقم الهوية <span className="text-destructive">*</span></label>
-            <input {...register("national_id")} className={inputClass("national_id")} dir="ltr" />
-            {errors.national_id && <p className="text-destructive text-[11px] mt-1">{errors.national_id.message}</p>}
+            <input {...register("idnumber")} className={inputClass("idnumber")} dir="ltr" />
+            {errors.idnumber && <p className="text-destructive text-[11px] mt-1">{errors.idnumber.message}</p>}
           </div>
 
           <div>
             <label className="font-semibold mb-2 block">المحافظة <span className="text-destructive">*</span></label>
             <select {...register("cityId")} className={inputClass("cityId")}>
               <option value="">اختر المحافظة</option>
-              {cities.map(c => <option key={c.id} value={c.id.toString()}>{c.name}</option>)}
+              {apiCities.map((city) => (
+                <option key={city.id} value={city.id.toString()}>
+                  {city.name}
+                </option>
+              ))}
             </select>
             {errors.cityId && <p className="text-destructive text-[11px] mt-1">{errors.cityId.message}</p>}
           </div>
-                    
+
           <div className="lg:col-span-3">
             <label className="font-semibold mb-2 block">الاسم بالعربي <span className="text-destructive">*</span></label>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div><input placeholder="الأول" {...register("first_name")} className={inputClass("first_name")} />{errors.first_name && <p className="text-destructive text-[10px]">{errors.first_name.message}</p>}</div>
-              <div><input placeholder="الأب" {...register("father_name")} className={inputClass("father_name")} />{errors.father_name && <p className="text-destructive text-[10px]">{errors.father_name.message}</p>}</div>
-              <div><input placeholder="الجد" {...register("grandfather_name")} className={inputClass("grandfather_name")} />{errors.grandfather_name && <p className="text-destructive text-[10px]">{errors.grandfather_name.message}</p>}</div>
-              <div><input placeholder="العائلة" {...register("last_name")} className={inputClass("last_name")} />{errors.last_name && <p className="text-destructive text-[10px]">{errors.last_name.message}</p>}</div>
+              <div><input placeholder="الأول" {...register("firstName")} className={inputClass("firstName")} />{errors.firstName && <p className="text-destructive text-[10px]">{errors.firstName.message}</p>}</div>
+              <div><input placeholder="الأب" {...register("fatherName")} className={inputClass("fatherName")} />{errors.fatherName && <p className="text-destructive text-[10px]">{errors.fatherName.message}</p>}</div>
+              <div><input placeholder="الجد" {...register("grandfatherName")} className={inputClass("grandfatherName")} />{errors.grandfatherName && <p className="text-destructive text-[10px]">{errors.grandfatherName.message}</p>}</div>
+              <div><input placeholder="العائلة" {...register("familyName")} className={inputClass("familyName")} />{errors.familyName && <p className="text-destructive text-[10px]">{errors.familyName.message}</p>}</div>
             </div>
           </div>
 
           <div className="lg:col-span-3">
-            <label className="font-semibold mb-2 block">الاسم بالإنجليزي <span className="text-destructive">*</span></label>
+            <label className="font-semibold mb-2 block">الاسم بالإنجليزي </label>
             <div className="grid grid-cols-2 gap-3">
-              <div><input placeholder="First Name" {...register("first_name_en")} className={inputClass("first_name_en")} dir="ltr" />{errors.first_name_en && <p className="text-destructive text-[10px]">{errors.first_name_en.message}</p>}</div>
-              <div><input placeholder="Last Name" {...register("last_name_en")} className={inputClass("last_name_en")} dir="ltr" />{errors.last_name_en && <p className="text-destructive text-[10px]">{errors.last_name_en.message}</p>}</div>
+              <div><input placeholder="First Name" {...register("firstNameEn")} className={inputClass("firstNameEn")} dir="ltr" />{errors.firstNameEn && <p className="text-destructive text-[10px]">{errors.firstNameEn.message}</p>}</div>
+              <div><input placeholder="Last Name" {...register("familyNameEn")} className={inputClass("familyNameEn")} dir="ltr" />{errors.familyNameEn && <p className="text-destructive text-[10px]">{errors.familyNameEn.message}</p>}</div>
             </div>
           </div>
 
           <div>
             <label className="font-semibold mb-2 block">تاريخ الميلاد <span className="text-destructive">*</span></label>
-            <input type="date" {...register("birth_date")} className={inputClass("birth_date")} />
-            {errors.birth_date && <p className="text-destructive text-[11px] mt-1">{errors.birth_date.message}</p>}
+            <input type="date" {...register("birthDate")} className={inputClass("birthDate")} />
+            {errors.birthDate && <p className="text-destructive text-[11px] mt-1">{errors.birthDate.message}</p>}
           </div>
 
           <div>
@@ -145,24 +163,41 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
           </div>
 
           <div className="lg:col-span-3">
-            <label className="font-semibold mb-2 block">العنوان بالتفصيل <span className="text-destructive">*</span></label>
+            <label className="font-semibold mb-2 block">العنوان بالتفصيل</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div><input placeholder="الشارع" {...register("address_street")} className={inputClass("address_street")} />{errors.address_street && <p className="text-destructive text-[10px]">{errors.address_street.message}</p>}</div>
-              <div><input placeholder="البلدة" {...register("address_town")} className={inputClass("address_town")} />{errors.address_town && <p className="text-destructive text-[10px]">{errors.address_town.message}</p>}</div>
-              <div><input placeholder="الحي" {...register("address_neighborhood")} className={inputClass("address_neighborhood")} />{errors.address_neighborhood && <p className="text-destructive text-[10px]">{errors.address_neighborhood.message}</p>}</div>
+              <div><input placeholder="الشارع" {...register("street")} className={inputClass("street")} />{errors.street && <p className="text-destructive text-[10px]">{errors.street.message}</p>}</div>
+              <div><input placeholder="البلدة" {...register("village")} className={inputClass("village")} />{errors.village && <p className="text-destructive text-[10px]">{errors.village.message}</p>}</div>
+              <div><input placeholder="الحي" {...register("neighborhood")} className={inputClass("neighborhood")} />{errors.neighborhood && <p className="text-destructive text-[10px]">{errors.neighborhood.message}</p>}</div>
             </div>
           </div>
 
-          <div className="lg:col-span-2">
-            <label className="font-semibold mb-2 block">أرقام الجوال</label>
+           <div className="lg:col-span-2">
+            <label className="font-semibold mb-2 block">أرقام الجوال </label>
             <div className="space-y-2">
               {mobile_numbers.map((_, index) => (
                 <div key={index} className="flex gap-2">
-                  <input value={mobile_numbers[index]} onChange={(e) => updateMobile(index, e.target.value)} className={inputClass("mobile_numbers" as any)} dir="ltr" />
-                  {index > 0 && <button type="button" onClick={() => removeMobile(index)} className="text-destructive p-1"><X size={16}/></button>}
+                  <input 
+                    value={mobile_numbers[index]} 
+                    onChange={(e) => updateMobile(index, e.target.value)} 
+                    className={inputClass("mobile_numbers" as any)} 
+                    dir="ltr" 
+                    placeholder="05xxxxxxxx"
+                  />
+                  {index > 0 && (
+                    <button type="button" onClick={() => removeMobile(index)} className="text-destructive p-1 hover:bg-destructive/10 rounded-lg transition-colors">
+                      <X size={16}/>
+                    </button>
+                  )}
                 </div>
               ))}
-              <button type="button" onClick={addMobile} className="text-primary text-xs flex items-center gap-1"><Plus size={14}/> إضافة رقم</button>
+              <button 
+                type="button" 
+                onClick={addMobile} 
+                className="text-primary text-xs flex items-center gap-1 hover:underline mt-1"
+              >
+                <Plus size={14}/> إضافة رقم
+              </button>
+              {errors.phoneNumbers && <p className="text-destructive text-[11px] mt-1">{errors.phoneNumbers.message}</p>}
             </div>
           </div>
 

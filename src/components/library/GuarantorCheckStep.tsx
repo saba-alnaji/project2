@@ -5,11 +5,11 @@ import { cn } from "@/lib/utils";
 
 interface Guarantor {
   id: string;
-  national_id: string;
+  idnumber: string;
   name: string;
   job?: string;
-  address?: string;
-  mobile_numbers?: string[];
+  village?: string;
+  phoneNumbers?: string[];
 }
 
 interface GuarantorStepProps {
@@ -48,11 +48,11 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
         const data = response.data;
         setFound({
           id: data.id,
-          national_id: data.idnumber,
+          idnumber: data.idnumber,
           name: `${data.firstName} ${data.familyName}`,
           job: data.job,
-          address: data.village,
-          mobile_numbers: data.phoneNumbers || [],
+          village: data.village,
+          phoneNumbers: data.phoneNumbers || [],
         });
       } else {
         setNotFound(true);
@@ -73,6 +73,17 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
     if (e.key === "Enter") handleSearch();
   };
 
+  const getPreviousDisplayName = () => {
+    if (!previousGuarantor) return "";
+    return previousGuarantor.name || 
+      `${previousGuarantor.firstName || ""} ${previousGuarantor.familyName || ""}`.trim();
+  };
+
+  const getPreviousId = () => {
+    if (!previousGuarantor) return "";
+    return previousGuarantor.idnumber || "";
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="text-center mb-8">
@@ -80,33 +91,29 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           <UserCheck className="w-8 h-8 text-white" />
         </div>
         <h2 className="text-2xl font-bold text-foreground mb-2">بيانات الكفيل</h2>
-        <p className="text-muted-foreground text-sm">ابحث عن كفيل موجود بالرقم الوطني</p>
+        <p className="text-muted-foreground">ابحث عن كفيل موجود بالرقم الوطني</p>
       </div>
 
-      <div className="max-w-lg mx-auto space-y-6">
-        {/* مؤشر بيانات كفيل محفوظة سابقاً (تمت إزالة زر التعديل) */}
+      <div className="max-w-lg mx-auto space-y-5">
+        {/* مؤشر بيانات كفيل محفوظة سابقاً */}
         {previousGuarantor && !searched && (
-          <div className="animate-fade-in bg-primary/5 border-2 border-primary/30 rounded-2xl p-5">
-            <div className="flex items-center gap-3 mb-4">
+          <div className="animate-fade-in bg-primary/5 border-2 border-primary/30 rounded-2xl p-4">
+            <div className="flex items-center gap-3 mb-3">
               <CheckCircle className="w-5 h-5 text-primary shrink-0" />
               <h3 className="font-bold text-primary text-sm">بيانات الكفيل الحالية</h3>
             </div>
-            <div className="bg-card rounded-xl p-4 space-y-2 mb-5 shadow-sm border border-primary/10">
+            <div className="bg-card rounded-xl p-3 space-y-1 mb-3">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground text-xs">الاسم</span>
-                <span className="font-bold text-foreground text-sm">
-                  {previousGuarantor.name || `${previousGuarantor.first_name || ""} ${previousGuarantor.last_name || ""}`}
-                </span>
+                <span className="font-bold text-foreground text-sm">{getPreviousDisplayName()}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground text-xs">رقم الهوية</span>
-                <span className="font-medium text-foreground text-sm" dir="ltr">
-                  {previousGuarantor.national_id}
-                </span>
+                <span className="font-medium text-foreground text-sm" dir="ltr">{getPreviousId()}</span>
               </div>
             </div>
             <button
-              onClick={() => previousGuarantorIsNew ? onGuarantorNew(previousGuarantor.national_id || "") : onGuarantorFound(previousGuarantor)}
+              onClick={() => previousGuarantorIsNew ? onGuarantorNew(getPreviousId()) : onGuarantorFound(previousGuarantor)}
               className="w-full py-3 rounded-xl gradient-primary text-white font-bold text-sm flex items-center justify-center gap-2 shadow-card hover:shadow-elevated transition-all duration-200"
             >
               المتابعة بالبيانات المحفوظة
@@ -117,7 +124,7 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
 
         {/* حقل البحث */}
         <div className="space-y-3">
-          <label className="block text-sm font-semibold text-foreground mb-1">البحث برقم هوية كفيل آخر</label>
+          <label className="block text-sm font-semibold text-foreground mb-2">البحث برقم هوية كفيل آخر</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -132,7 +139,7 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
               onKeyDown={handleKeyDown}
               placeholder="أدخل رقم الهوية..."
               className={cn(
-                "flex-1 px-4 py-3 rounded-xl border-2 text-base transition-all bg-card",
+                "flex-1 px-4 py-3 rounded-xl border-2 text-base transition-all bg-card text-foreground placeholder:text-muted-foreground focus:outline-none",
                 searched && (notFound || errorMessage) ? "border-destructive" : "border-border focus:border-primary"
               )}
               dir="ltr"
@@ -140,9 +147,13 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
             <button
               onClick={handleSearch}
               disabled={loading || !nationalId.trim()}
-              className="px-6 py-3 rounded-xl gradient-primary text-white font-bold shadow-card disabled:opacity-50"
+              className={cn(
+                "px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center gap-2",
+                "gradient-primary text-white shadow-card hover:shadow-elevated",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             </button>
           </div>
         </div>
@@ -150,10 +161,13 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
         {/* النتيجة: موجود */}
         {searched && found && (
           <div className="animate-fade-in bg-success-bg border-2 border-success rounded-2xl p-5">
-            <div className="bg-white/70 rounded-xl p-4 mb-4 shadow-sm">
-              <p className="text-xs text-muted-foreground mb-1">تم العثور على:</p>
-              <p className="font-bold text-foreground text-lg">{found.name}</p>
-              <p className="text-sm text-muted-foreground" dir="ltr">{found.national_id}</p>
+            <div className="flex items-start gap-3 mb-4">
+              <CheckCircle className="w-6 h-6 text-success mt-0.5 shrink-0" />
+              <div>
+                <h3 className="font-bold text-success text-base">تم العثور على:</h3>
+                <p className="text-foreground font-bold">{found.name}</p>
+                <p className="text-muted-foreground text-sm" dir="ltr">{found.idnumber}</p>
+              </div>
             </div>
             <button
               onClick={() => onGuarantorFound(found)}
@@ -165,15 +179,26 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           </div>
         )}
 
+        {/* خطأ سيرفر */}
+        {errorMessage && (
+          <div className="animate-fade-in bg-destructive/10 border-2 border-destructive rounded-2xl p-4 text-center">
+            <p className="text-destructive font-semibold">{errorMessage}</p>
+          </div>
+        )}
+
         {/* النتيجة: غير موجود */}
         {searched && notFound && !errorMessage && (
-          <div className="animate-fade-in bg-warning-bg border-2 border-warning rounded-2xl p-5 text-center">
-            <AlertCircle className="w-10 h-10 text-warning mx-auto mb-3" />
-            <h3 className="font-bold text-warning mb-1">الكفيل غير مسجل</h3>
-            <p className="text-warning/80 text-sm mb-4">هل تريد إضافة بيانات هذا الكفيل كجديد؟</p>
+          <div className="animate-fade-in bg-warning-bg border-2 border-warning rounded-2xl p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-warning mt-0.5 shrink-0" />
+              <div>
+                <h3 className="font-bold text-warning text-base">الكفيل غير مسجل</h3>
+                <p className="text-warning/70 text-sm mt-0.5">هل تريد إضافة بيانات هذا الكفيل كجديد؟</p>
+              </div>
+            </div>
             <button
               onClick={() => onGuarantorNew(nationalId.trim())}
-              className="w-full py-3 rounded-xl gradient-accent text-white font-bold flex items-center justify-center gap-2 shadow-accent"
+              className="w-full py-3 rounded-xl bg-orange-500 text-white font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-orange-600 transition-all duration-200"
             >
               إضافة كفيل جديد
               <ArrowLeft className="w-5 h-5" />
@@ -181,18 +206,16 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           </div>
         )}
 
+        {/* زر الرجوع */}
         
       </div>
-      {/* زر الرجوع للخلف */}
-        <div className="pt-4 ">
-
-          <button
-            onClick={onBack}
-            className="px-10 py-2.5 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 shadow-elevated hover:shadow-accent transition-all">
-            <ArrowRight className="w-5 h-5" /> السابق
-
-          </button>
-        </div>
+      <button
+          onClick={onBack}
+          className="px-10 py-2.5 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 shadow-elevated hover:shadow-accent transition-all"
+        >
+          <ArrowRight className="w-5 h-5" />
+          السابق
+        </button>
     </div>
   );
 }

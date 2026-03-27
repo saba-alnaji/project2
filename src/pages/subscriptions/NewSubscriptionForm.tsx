@@ -5,7 +5,7 @@ import StepIndicator from "@/components/library/StepIndicator";
 import SubscriberStep, { SubscriberFormData } from "@/components/library/SubscriberStep";
 import GuarantorCheckStep from "@/components/library/GuarantorCheckStep";
 import GuarantorFormStep from "@/components/library/GuarantorFormStep";
-import SubscriptionStep, { SubscriptionFormData, categoryToId, paymentMethodToId } from "@/components/library/SubscriptionStep";
+import SubscriptionStep, { SubscriptionFormData } from "@/components/library/SubscriptionStep";
 
 const steps = [
   { id: 1, label: "بيانات المشترك" },
@@ -18,18 +18,20 @@ export default function NewSubscriptionForm() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // States لحفظ البيانات بين الخطوات
   const [subscriberData, setSubscriberData] = useState<SubscriberFormData | null>(null);
   const [guarantorData, setGuarantorData] = useState<any>(null);
   const [guarantorFormValues, setGuarantorFormValues] = useState<any>(null);
+  const [subscriptionData, setSubscriptionData] = useState<SubscriptionFormData | null>(null);
   const [isNewGuarantor, setIsNewGuarantor] = useState(false);
 
-  // ================= Step 1 =================
+  // ================= الخطوة 1: المشترك =================
   const handleSubscriberNext = (data: SubscriberFormData) => {
     setSubscriberData(data);
     setCurrentStep(2);
   };
 
-  // ================= Step 2 (موجود) =================
+  // ================= الخطوة 2: الكفيل =================
   const handleGuarantorFound = (data: any) => {
     setIsNewGuarantor(false);
     setGuarantorData(data);
@@ -37,91 +39,89 @@ export default function NewSubscriptionForm() {
     setCurrentStep(3);
   };
 
-  // ================= Step 2 (جديد) =================
   const handleGuarantorNew = (nationalId: string) => {
     setIsNewGuarantor(true);
     if (!guarantorFormValues) {
-      setGuarantorFormValues({ national_id: nationalId, mobile_numbers: [""] });
+      setGuarantorFormValues({ idnumber: nationalId, phoneNumbers: [""] });
     }
   };
 
-  // ================= فورم الكفيل =================
   const handleGuarantorFormSubmit = (data: any) => {
     setGuarantorData(data);
     setGuarantorFormValues(data);
     setCurrentStep(3);
   };
 
-  // ================= رجوع =================
   const handleGuarantorBack = (currentFormValues?: any) => {
     if (isNewGuarantor) {
-      // حفظ القيم الحالية قبل الرجوع
-      if (currentFormValues) {
-        setGuarantorFormValues(currentFormValues);
-      }
+      if (currentFormValues) setGuarantorFormValues(currentFormValues);
       setIsNewGuarantor(false);
     } else {
       setCurrentStep(1);
     }
   };
 
-  // ================= Submit =================
-  const handleFinalSubmit = async (subscriptionData: SubscriptionFormData) => {
-    if (!subscriberData || !guarantorData) return;
+  // ================= الخطوة 3: الاشتراك والارسال النهائي =================
+  const handleSubscriptionBack = (currentValues: SubscriptionFormData) => {
+    setSubscriptionData(currentValues); // حفظ البيانات عند الرجوع
+    setCurrentStep(2);
+  };
 
+  const handleFinalSubmit = async (finalSubData: SubscriptionFormData) => {
+    if (!subscriberData || !guarantorData) return;
+    setSubscriptionData(finalSubData);
     setLoading(true);
+
     try {
       const token = localStorage.getItem("token");
 
+      // التوافق التام مع الـ API Body (lowercase ومطابقة للمسميات)
       const apiPayload = {
         memberInfo: {
-          firstName: (subscriberData as any).first_name,
-          familyName: (subscriberData as any).last_name,
-          fatherName: (subscriberData as any).father_name,
-          grandfatherName: (subscriberData as any).grandfather_name,
-          firstNameEn: (subscriberData as any).first_name_en,
-          familyNameEn: (subscriberData as any).last_name_en,
-          birthDate: subscriberData.birth_date,
+          firstName: subscriberData.firstName,
+          familyName: subscriberData.familyName,
+          fatherName: subscriberData.fatherName,
+          grandfatherName: subscriberData.grandfatherName,
+          firstNameEn: subscriberData.firstNameEn || "",
+          familyNameEn: subscriberData.familyNameEn || "",
+          birthDate: subscriberData.birthDate,
           gender: subscriberData.gender,
-          idnumber: subscriberData.national_id,
-          memberNumber: subscriberData.subscriber_number,
+          idnumber: subscriberData.idnumber,
+          memberNumber: subscriberData.memberNumber,
           job: subscriberData.job,
-          cityId: parseInt((subscriberData as any).cityId),
-          street: (subscriberData as any).address_street,
-          village: (subscriberData as any).address_town,
-          neighborhood: (subscriberData as any).address_neighborhood,
-          phoneNumbers: subscriberData.mobile_numbers.filter((m: string) => m.trim()),
+          cityId: subscriberData.cityId ? parseInt(subscriberData.cityId.toString()) : 0,
+          street: subscriberData.street || "",
+          village: subscriberData.village || "",
+          neighborhood: subscriberData.neighborhood || "",
+          phoneNumbers: subscriberData.phoneNumbers?.filter(n => n.trim()) || [],
         },
         guarantorInfo: {
-          firstName: guarantorData.first_name || guarantorData.name?.split(" ")[0] || "",
-          familyName: guarantorData.last_name || guarantorData.name?.split(" ").slice(-1)[0] || "",
-          fatherName: guarantorData.father_name || "",
-          grandfatherName: guarantorData.grandfather_name || "",
-          idnumber: guarantorData.national_id || guarantorData.idnumber,
-          job: guarantorData.job,
-          street: guarantorData.address_street || "",
-          village: guarantorData.address_town || guarantorData.village || "",
-          neighborhood: guarantorData.address_neighborhood || guarantorData.neighborhood || "",
-          phoneNumbers: guarantorData.mobile_numbers || guarantorData.phoneNumbers || [],
+          firstName: guarantorData.firstName || guarantorData.name?.split(" ")[0] || "",
+          familyName: guarantorData.familyName || guarantorData.name?.split(" ").slice(-1)[0] || "",
+          fatherName: guarantorData.fatherName || "",
+          grandfatherName: guarantorData.grandfatherName || "",
+          idnumber: guarantorData.idnumber,
+          job: guarantorData.job || "",
+          street: guarantorData.street || "",
+          village: guarantorData.village || "",
+          neighborhood: guarantorData.neighborhood || "",
+          phoneNumbers: guarantorData.phoneNumbers || [],
         },
         subscriptionInfo: {
-          subscriptionType: subscriptionData.type,
-          startDate: subscriptionData.start_date,
-          endDate: subscriptionData.end_date,
-          amount: parseFloat(subscriptionData.fee.toString()),
-          memberClassificationId: categoryToId[subscriptionData.category] ?? 1,
-          paymentMethodId: paymentMethodToId[subscriptionData.payment_method] ?? 1,
-          receiptNumber: subscriptionData.receipt_number,
-          ledgerNumber: subscriptionData.book_number,
-          note: subscriptionData.notes || null,
+          subscriptionType: finalSubData.subscriptionType,
+          startDate: finalSubData.startDate,
+          endDate: finalSubData.endDate,
+          amount: Number(finalSubData.amount),
+          memberClassificationId: Number(finalSubData.memberClassificationId),
+          paymentMethodId: Number(finalSubData.paymentMethodId),
+          receiptNumber: finalSubData.receiptNumber,
+          ledgerNumber: finalSubData.ledgerNumber,
+          note: finalSubData.note || "",
         },
       };
 
       await axios.post("https://localhost:8080/api/Subscription/create", apiPayload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       setSuccess(true);
@@ -132,7 +132,6 @@ export default function NewSubscriptionForm() {
     }
   };
 
-  // ================= Success UI =================
   if (success) {
     return (
       <div className="text-center py-16 animate-fade-in">
@@ -140,12 +139,8 @@ export default function NewSubscriptionForm() {
           <CheckCircle className="w-12 h-12 text-success" />
         </div>
         <h2 className="text-3xl font-black text-foreground mb-3">تم بنجاح</h2>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-6 py-3 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 mx-auto shadow-elevated hover:shadow-accent transition-all duration-200"
-        >
-          <Plus className="w-5 h-5" />
-          إضافة جديد
+        <button onClick={() => window.location.reload()} className="px-6 py-3 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 mx-auto shadow-elevated transition-all">
+          <Plus className="w-5 h-5" /> إضافة جديد
         </button>
       </div>
     );
@@ -154,37 +149,25 @@ export default function NewSubscriptionForm() {
   return (
     <div>
       <StepIndicator steps={steps} currentStep={currentStep} />
-
       <div className="bg-card rounded-2xl p-6 md:p-8 shadow-card border border-border">
-        {/* Step 1 */}
-        {currentStep === 1 && (
-          <SubscriberStep onNext={handleSubscriberNext} initialData={subscriberData} />
-        )}
-
-        {/* Step 2 */}
-        {currentStep === 2 &&
-          (!isNewGuarantor ? (
-            <GuarantorCheckStep
-              onGuarantorFound={handleGuarantorFound}
-              onGuarantorNew={handleGuarantorNew}
-              onBack={handleGuarantorBack}
-              previousGuarantor={guarantorData || guarantorFormValues}
-              previousGuarantorIsNew={!!guarantorFormValues}
-            />
-          ) : (
-            <GuarantorFormStep
-              initialData={guarantorFormValues}
-              onNext={handleGuarantorFormSubmit}
-              onBack={handleGuarantorBack}
-            />
-          ))}
-
-        {/* Step 3 */}
+        {currentStep === 1 && <SubscriberStep onNext={handleSubscriberNext} initialData={subscriberData} />}
+        {currentStep === 2 && (!isNewGuarantor ? (
+          <GuarantorCheckStep
+            onGuarantorFound={handleGuarantorFound}
+            onGuarantorNew={handleGuarantorNew}
+            onBack={handleGuarantorBack}
+            previousGuarantor={guarantorData || guarantorFormValues}
+            previousGuarantorIsNew={!!guarantorFormValues}
+          />
+        ) : (
+          <GuarantorFormStep initialData={guarantorFormValues} onNext={handleGuarantorFormSubmit} onBack={handleGuarantorBack} />
+        ))}
         {currentStep === 3 && (
           <SubscriptionStep
             onSubmit={handleFinalSubmit}
-            onBack={() => setCurrentStep(2)}
+            onBack={handleSubscriptionBack}
             loading={loading}
+            initialData={subscriptionData}
           />
         )}
       </div>
