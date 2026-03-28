@@ -1,117 +1,398 @@
 import { useState } from "react";
-import { Search, RefreshCw, CheckCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, Save } from "lucide-react";
+import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import AgGridTable from "@/components/library/AgGridTable";
+
+// --- 1. الإعدادات والثوابت ---
+const today = new Date().toISOString().split("T")[0];
+const oneYearLater = (() => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().split("T")[0];
+})();
+
+const feeByCategory: Record<number, number> = {
+  1: 35, // شخص
+  2: 25, // طالب
+  4: 0,  // موظف بلدية
+};
+
+// --- 2. السكيما ---
+const renewSchema = z.object({
+  subscriptionType: z.string().min(1, "نوع الاشتراك مطلوب"),
+  memberClassificationId: z.coerce.number().min(1, "تصنيف المشترك مطلوب"),
+  startDate: z.string().min(1, "تاريخ البداية مطلوب"),
+  endDate: z.string().min(1, "تاريخ النهاية مطلوب"),
+  amount: z.coerce.number().min(0, "الرسوم يجب أن تكون 0 أو أكثر"),
+  paymentMethodId: z.coerce.number().min(1, "طريقة الدفع مطلوبة"),
+  receiptNumber: z.string().min(1, "رقم الوصل مطلوب"),
+  ledgerNumber: z.string().min(1, "رقم الدفتر مطلوب"),
+  duration: z.string().optional(),
+
+  note: z.string().optional().default(""),
+});
+
+type RenewFormData = z.infer<typeof renewSchema>;
 
 const inputClass = cn(
   "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
   "bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
 );
 
-const feeByCategory: Record<string, number> = { regular: 35, student: 25, municipality_employee: 0 };
-
 export default function RenewSubscriptionPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [subscriber, setSubscriber] = useState<any>(null);
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
-  const [form, setForm] = useState({ fee: 35, receipt_number: "", book_number: "", type: "public_library", category: "regular", notes: "" });
   const [renewing, setRenewing] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const { control, handleSubmit, setValue, reset } = useForm<RenewFormData>({
+    resolver: zodResolver(renewSchema),
+    defaultValues: {
+      subscriptionType: "مكتبة عامة",
+      memberClassificationId: 1,
+      startDate: today,
+      endDate: oneYearLater,
+      amount: 35,
+      paymentMethodId: 1,
+      receiptNumber: "",
+      ledgerNumber: "",
+      note: "",
+    },
+  });
+
+  // --- 3. تعريف أعمدة الجداول ---
+  // تأكدي أن هذا الكود موجود داخل صفحة RenewSubscriptionPage
+  const paymentColumns = [
+    {
+      field: "paymentDate",
+      headerName: "تاريخ الدفع",
+      flex: 1,
+      cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-"
+    },
+    {
+      field: "amount",
+      headerName: "المبلغ",
+      flex: 1,
+      cellRenderer: (p: any) => `${p.value} ₪`
+    },
+    {
+      field: "paymentMethod",
+      headerName: "طريقة الدفع",
+      flex: 1
+    },
+    {
+      field: "subscriptionType",
+      headerName: "نوع الاشتراك",
+      flex: 1
+    },
+    {
+      field: "createdBy",
+      headerName: "بواسطة",
+      flex: 1
+    }
+  ];
+  const loanColumns = [
+    { field: "BookTitle", headerName: "عنوان الكتاب", flex: 2 },
+    { field: "LoanDate", headerName: "تاريخ الإعارة", flex: 1 },
+    { field: "ReturnDate", headerName: "تاريخ الإرجاع", flex: 1 },
+    {
+      field: "Status",
+      headerName: "الحالة",
+      flex: 1,
+      cellRenderer: (p: any) => p.value === "Returned" ? "تم الإرجاع" : "قيد الإعارة"
+    },
+  ];
+
+  // --- 4. دالة البحث المجمعة ---
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return; setSearching(true); setSuccess(false);
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    setSuccess(false);
+    setSubscriber(null);
+
     try {
-      const { data, error } = await supabase.from("subscribers").select("*, subscriptions(*)")
-        .or(`name.ilike.%${searchQuery}%,subscriber_number.eq.${searchQuery},national_id.eq.${searchQuery}`).limit(1).single();
-      if (error || !data) { toast({ title: "لم يتم العثور على المشترك", variant: "destructive" }); setSubscriber(null); return; }
-      setSubscriber(data);
-      setSubscriptions(Array.isArray(data.subscriptions) ? data.subscriptions : data.subscriptions ? [data.subscriptions] : []);
-    } catch { toast({ title: "خطأ في البحث", variant: "destructive" }); } finally { setSearching(false); }
+      const token = localStorage.getItem("token");
+      const commonBody = { idNumber: searchQuery.trim(), memberNumber: null, status: null };
+
+      // استدعاء الثلاث روابط بالتوازي لسرعة الأداء
+      const [resSearch, resPayments, resLoans] = await Promise.all([
+        axios.post("https://localhost:8080/api/Subscription/search", commonBody, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.post("https://localhost:8080/api/Subscription/payment-history", commonBody, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.post("https://localhost:8080/api/Borrow/Borrow-history", {
+          ...commonBody,
+          pageNumber: 1,
+          pageSize: 50
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      const mainInfo = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
+
+      if (mainInfo) {
+        setSubscriber({
+          ...mainInfo,
+          paymentHistory: resPayments.data || [],
+          loanHistory: resLoans.data || []
+        });
+        toast({ title: "تم العثور على المشترك وجلب سجلاته ✅" });
+      } else {
+        toast({ title: "المشترك غير موجود", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "خطأ في جلب البيانات من السيرفر", variant: "destructive" });
+    } finally { setSearching(false); }
   };
 
-  const handleCategoryChange = (cat: string) => setForm(f => ({ ...f, category: cat, fee: feeByCategory[cat] ?? 35 }));
-
-  const handleRenew = async () => {
-    if (!subscriber) return; setRenewing(true);
+  // --- 5. دالة التجديد ---
+  const onSubmit = async (data: RenewFormData) => {
+    if (!subscriber) return;
+    setRenewing(true);
     try {
-      const today = new Date(); const endDate = new Date(); endDate.setFullYear(endDate.getFullYear() + 1);
-      const { error } = await supabase.from("subscriptions").insert({
-        subscriber_id: subscriber.id, duration: "annual", type: form.type, category: form.category,
-        start_date: today.toISOString().split("T")[0], end_date: endDate.toISOString().split("T")[0],
-        fee: form.fee, payment_method: "cash", receipt_number: form.receipt_number || null, book_number: form.book_number || null, notes: form.notes || null,
+      const token = localStorage.getItem("token");
+      const payload = {
+        userID: subscriber.userID,
+        subscriptionInfo: { ...data }
+      };
+
+      await axios.post("https://localhost:8080/api/Subscription/renew", payload, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (error) throw error;
-      setSuccess(true); toast({ title: "تم تجديد الاشتراك بنجاح ✅" });
-    } catch { toast({ title: "خطأ أثناء التجديد", variant: "destructive" }); } finally { setRenewing(false); }
+
+      setSuccess(true);
+      toast({ title: "تم تجديد الاشتراك بنجاح ✅" });
+    } catch (error) {
+      toast({ title: "فشل في عملية التجديد", variant: "destructive" });
+    } finally { setRenewing(false); }
   };
 
   return (
-    <div className="max-w-3xl mx-auto animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-3xl font-black text-foreground mb-1">تجديد اشتراك</h1>
-        <p className="text-muted-foreground">قم بتجديد اشتراك أي عضو موجود بالمكتبة.</p>
+    <div className="max-w-5xl mx-auto p-4" dir="rtl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-black mb-2 text-foreground">تجديد الاشتراك</h1>
+        <p className="text-muted-foreground">ابحث عن المشترك برقم الهوية لتحديث بياناته والاطلاع على سجلاته.</p>
       </div>
 
-      <div className="bg-card rounded-2xl p-5 shadow-card border border-border mb-6">
-        <h3 className="font-bold text-foreground mb-3">البحث عن مشترك</h3>
+      {/* البحث */}
+      <div className="bg-card rounded-2xl p-6 border border-border mb-6 shadow-sm">
         <div className="flex gap-3">
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()} placeholder="ادخل اسم المشترك أو رقمه" className={cn(inputClass, "flex-1")} />
-          <button onClick={handleSearch} disabled={searching} className="px-6 py-3 rounded-xl gradient-primary text-white font-bold shadow-card hover:shadow-elevated transition-all flex items-center gap-2">
-            <Search className="w-4 h-4" /> {searching ? "..." : "بحث"}
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            placeholder="أدخل رقم الهوية للبحث..."
+            className={cn(inputClass, "flex-1")}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={searching}
+            className="px-8 rounded-xl bg-primary text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2"
+          >
+            {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            بحث
           </button>
         </div>
       </div>
 
       {success ? (
-        <div className="text-center py-12 animate-fade-in">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-success-bg flex items-center justify-center"><CheckCircle className="w-10 h-10 text-success" /></div>
-          <h2 className="text-2xl font-black text-foreground mb-2">تم التجديد بنجاح!</h2>
-          <button onClick={() => { setSuccess(false); setSubscriber(null); setSearchQuery(""); }} className="mt-4 px-6 py-3 rounded-xl gradient-primary text-white font-bold">تجديد آخر</button>
+        <div className="text-center py-12 bg-card rounded-2xl border border-border">
+          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-4">تم التجديد بنجاح!</h2>
+          <button
+            onClick={() => { setSuccess(false); setSubscriber(null); setSearchQuery(""); reset(); }}
+            className="px-6 py-2 bg-primary text-white rounded-lg font-bold"
+          >
+            تجديد لمشترك آخر
+          </button>
         </div>
       ) : subscriber && (
-        <div className="space-y-6">
-          <div className="bg-card rounded-2xl p-6 shadow-card border border-border">
-            <h3 className="font-bold text-foreground mb-4">المشترك: <span className="text-primary">{subscriber.name}</span></h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label className="block text-sm font-semibold text-foreground mb-2">نوع الاشتراك</label>
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className={inputClass}>
-                  <option value="public_library">مكتبة عامة</option><option value="children_library">مكتبة أطفال</option>
-                </select></div>
-              <div><label className="block text-sm font-semibold text-foreground mb-2">تصنيف المشترك</label>
-                <select value={form.category} onChange={e => handleCategoryChange(e.target.value)} className={inputClass}>
-                  <option value="regular">شخص</option><option value="student">طالب</option><option value="municipality_employee">موظف بلدية</option>
-                </select></div>
-              <div><label className="block text-sm font-semibold text-foreground mb-2">الرسوم (شيكل)</label>
-                <input type="number" value={form.fee} onChange={e => setForm(f => ({ ...f, fee: Number(e.target.value) }))} className={inputClass} dir="ltr" /></div>
-              <div><label className="block text-sm font-semibold text-foreground mb-2">رقم الوصل</label>
-                <input type="text" value={form.receipt_number} onChange={e => setForm(f => ({ ...f, receipt_number: e.target.value }))} className={inputClass} /></div>
-              <div><label className="block text-sm font-semibold text-foreground mb-2">رقم الدفتر</label>
-                <input type="text" value={form.book_number} onChange={e => setForm(f => ({ ...f, book_number: e.target.value }))} className={inputClass} /></div>
-              <div><label className="block text-sm font-semibold text-foreground mb-2">ملاحظات</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className={cn(inputClass, "resize-none")} /></div>
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+
+          {/* كارت المعلومات الأساسية */}
+          <div className="bg-card rounded-2xl p-6 border-2 border-primary/10 shadow-sm flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                <UserCheck className="text-primary" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-foreground">
+                  {subscriber.memberInfo?.firstName} {subscriber.memberInfo?.familyName}
+                </h3>
+                <p className="text-sm text-muted-foreground">رقم الهوية: {subscriber.memberInfo?.idnumber}</p>
+              </div>
             </div>
-            <div className="mt-4 p-4 rounded-2xl bg-primary/5 border-2 border-primary/20 flex justify-between items-center">
-              <span className="text-foreground font-semibold">إجمالي الرسوم</span>
-              <span className="text-2xl font-black text-primary">{form.fee.toFixed(2)} ₪</span>
-            </div>
-            <button onClick={handleRenew} disabled={renewing} className="w-full mt-4 py-4 rounded-xl gradient-accent text-white font-bold text-lg shadow-accent hover:shadow-elevated transition-all flex items-center justify-center gap-2">
-              <RefreshCw className="w-5 h-5" /> {renewing ? "جاري التجديد..." : "تجديد الاشتراك"}
-            </button>
+            <div className="text-left">
+  {(() => {
+    // 1. جلب تاريخ آخر دفعة من المصفوفة التي ظهرت في الـ Preview
+    const lastPayment = subscriber.paymentHistory?.[0];
+    const pDate = lastPayment?.paymentDate; // لاحظي p صغيرة و D كبيرة كما في الصورة
+
+    let isActive = false;
+
+    if (pDate) {
+      const paymentDate = new Date(pDate);
+      const expiryDate = new Date(paymentDate);
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1); // إضافة سنة
+
+      // إذا كان تاريخ الانتهاء أكبر من تاريخ اليوم فهو فعال
+      isActive = expiryDate > new Date();
+    }
+
+    // 2. فحص إضافي: هل السيرفر أرجع رسالة نجاح أو كلمة Active؟
+    if (!isActive && subscriber.status?.toLowerCase().includes("active")) {
+      isActive = true;
+    }
+
+    return (
+      <span className={cn(
+        "px-4 py-1 rounded-xl text-xs font-black shadow-sm border", 
+        isActive 
+          ? "bg-green-500/10 text-green-600 border-green-200" 
+          : "bg-red-500/10 text-red-600 border-red-200"
+      )}>
+        {isActive ? "اشتراك فعّال ✅" : "اشتراك منتهي ⚠️"}
+      </span>
+    );
+  })()}
+</div>
           </div>
 
-          {subscriptions.length > 0 && (
-            <div className="bg-card rounded-2xl p-6 shadow-card border border-border">
-              <h3 className="font-bold text-foreground mb-4">سجل الاشتراكات السابقة</h3>
-              <AgGridTable columnDefs={[
-                { field: "start_date", headerName: "تاريخ البداية" }, { field: "end_date", headerName: "تاريخ النهاية" },
-                { field: "fee", headerName: "الرسوم" }, { field: "status", headerName: "الحالة" },
-              ]} rowData={subscriptions} showExport={false} showPrint={false} />
+
+
+          <div className="space-y-6">
+            {/*  سجل المدفوعات    */}
+            <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-primary" /> سجل المدفوعات السابقة
+              </h3>
+              <div className="h-[350px] w-full">
+                <AgGridTable
+                  rowData={subscriber.paymentHistory}
+                  columnDefs={paymentColumns}
+                  pageSize={5}
+                />
+              </div>
             </div>
-          )}
+
+            {/*  سجل الإعارات   */}
+            <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-primary" /> سجل الإعارات (Borrowing)
+              </h3>
+              <div className="h-[350px] w-full">
+                <AgGridTable
+                  rowData={subscriber.loanHistory}
+                  columnDefs={loanColumns}
+                  pageSize={5}
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* نموذج التجديد */}
+          <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
+            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-foreground">
+              <RefreshCw className="w-5 h-5 text-primary" /> تفاصيل التجديد الجديد
+            </h3>
+
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-2">مدة الاشتراك</label>
+                  <Controller
+                    name="duration"
+                    control={control}
+                    render={({ field }) => (
+                      <select {...field} className={inputClass}>
+                        <option value="annual">سنوي</option>
+                      </select>
+                    )}
+                  />
+
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">نوع الاشتراك</label>
+                  <Controller name="subscriptionType" control={control} render={({ field }) => (
+                    <select {...field} className={inputClass}>
+                      <option value="مكتبة عامة">مكتبة عامة</option>
+                      <option value="مكتبة أطفال">مكتبة أطفال</option>
+                    </select>
+                  )} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">تصنيف المشترك</label>
+                  <Controller name="memberClassificationId" control={control} render={({ field }) => (
+                    <select
+                      className={inputClass}
+                      value={field.value}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        field.onChange(val);
+                        setValue("amount", feeByCategory[val] ?? 35);
+                      }}
+                    >
+                      <option value={1}>شخص</option>
+                      <option value={2}>طالب</option>
+                      <option value={4}>موظف بلدية</option>
+                    </select>
+                  )} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">الرسوم المستحقة (₪)</label>
+                  <Controller name="amount" control={control} render={({ field }) => (
+                    <input type="number" {...field} className={cn(inputClass, "font-bold text-primary bg-primary/5")} />
+                  )} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">طريقة الدفع</label>
+                  <Controller name="paymentMethodId" control={control} render={({ field }) => (
+                    <select {...field} className={inputClass} onChange={(e) => field.onChange(Number(e.target.value))}>
+                      <option value={1}>نقداً</option>
+                    </select>
+                  )} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">رقم الوصل</label>
+                  <Controller name="receiptNumber" control={control} render={({ field }) => (
+                    <input {...field} className={inputClass} />
+                  )} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">رقم الدفتر</label>
+                  <Controller name="ledgerNumber" control={control} render={({ field }) => (
+                    <input {...field} className={inputClass} />
+                  )} />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={renewing}
+                className="w-full mt-6 py-4 bg-primary text-white rounded-xl font-black text-lg shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
+              >
+                {renewing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                حفظ وإتمام عملية التجديد
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>

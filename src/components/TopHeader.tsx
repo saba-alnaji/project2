@@ -37,9 +37,8 @@ export function TopHeader({ onToggleSidebar }: TopHeaderProps) {
         </div>
 
         {/* Arabic */}
-       <div className="flex-1 text-right hidden sm:block">
-          <h2 className="text-sm md:text-base font-bold text-primary-dark">
-            بلدية طولكرم
+        <div className="flex-1 text-right hidden sm:block">
+          <h2 className="text-base md:text-lg font-extrabold tracking-wide text-primary-dark">            بلدية طولكرم
           </h2>
           <p className="text-xs text-muted-foreground">المكتبة العامة</p>
         </div>

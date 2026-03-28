@@ -75,7 +75,8 @@ export default function NewSubscriptionForm() {
     try {
       const token = localStorage.getItem("token");
 
-      // التوافق التام مع الـ API Body (lowercase ومطابقة للمسميات)
+      const nameParts = guarantorData.name ? guarantorData.name.split(" ") : [];
+
       const apiPayload = {
         memberInfo: {
           firstName: subscriberData.firstName,
@@ -84,54 +85,61 @@ export default function NewSubscriptionForm() {
           grandfatherName: subscriberData.grandfatherName,
           firstNameEn: subscriberData.firstNameEn || "",
           familyNameEn: subscriberData.familyNameEn || "",
-          birthDate: subscriberData.birthDate,
           gender: subscriberData.gender,
+          birthDate: subscriberData.birthDate,
           idnumber: subscriberData.idnumber,
           memberNumber: subscriberData.memberNumber,
           job: subscriberData.job,
-          cityId: subscriberData.cityId ? parseInt(subscriberData.cityId.toString()) : 0,
+          cityId: subscriberData.cityId ? parseInt(subscriberData.cityId.toString()) : null,
+          neighborhood: subscriberData.neighborhood || "",
           street: subscriberData.street || "",
           village: subscriberData.village || "",
-          neighborhood: subscriberData.neighborhood || "",
-          phoneNumbers: subscriberData.phoneNumbers?.filter(n => n.trim()) || [],
+          phoneNumbers: subscriberData.phoneNumbers?.filter(n => n.trim()) || []
         },
-        guarantorInfo: {
-          firstName: guarantorData.firstName || guarantorData.name?.split(" ")[0] || "",
-          familyName: guarantorData.familyName || guarantorData.name?.split(" ").slice(-1)[0] || "",
-          fatherName: guarantorData.fatherName || "",
-          grandfatherName: guarantorData.grandfatherName || "",
-          idnumber: guarantorData.idnumber,
-          job: guarantorData.job || "",
-          street: guarantorData.street || "",
-          village: guarantorData.village || "",
-          neighborhood: guarantorData.neighborhood || "",
-          phoneNumbers: guarantorData.phoneNumbers || [],
-        },
+
+     guarantorInfo: {
+    firstName: guarantorData?.firstName || "",
+    fatherName: guarantorData?.fatherName || "",
+    grandfatherName: guarantorData?.grandfatherName || "",
+    familyName: guarantorData?.familyName || "",
+IDNumber: String(guarantorData.idnumber || guarantorData.IDNumber || ""),
+    job: guarantorData?.job || "",
+    neighborhood: guarantorData?.neighborhood || "",
+    street: guarantorData?.street || "",
+    village: guarantorData?.village || "",
+    phoneNumbers: guarantorData?.phoneNumbers?.filter((n: any) => n && String(n).trim()) || []
+},
+
         subscriptionInfo: {
           subscriptionType: finalSubData.subscriptionType,
           startDate: finalSubData.startDate,
           endDate: finalSubData.endDate,
-          amount: Number(finalSubData.amount),
           memberClassificationId: Number(finalSubData.memberClassificationId),
-          paymentMethodId: Number(finalSubData.paymentMethodId),
-          receiptNumber: finalSubData.receiptNumber,
-          ledgerNumber: finalSubData.ledgerNumber,
           note: finalSubData.note || "",
-        },
+          paymentMethodId: Number(finalSubData.paymentMethodId),
+          amount: Number(finalSubData.amount),
+          ledgerNumber: finalSubData.ledgerNumber,
+          receiptNumber: finalSubData.receiptNumber
+        }
       };
 
+      console.log("البيانات النهائية المرسلة للسيرفر:", apiPayload);
+
       await axios.post("https://localhost:8080/api/Subscription/create", apiPayload, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
       });
 
       setSuccess(true);
     } catch (error: any) {
-      alert("خطأ: " + (error.response?.data?.message || "مشكلة في السيرفر"));
+      console.error("تفاصيل الخطأ من السيرفر:", error.response?.data);
+      alert("خطأ: " + (error.response?.data?.message || "مشكلة في السيرفر، تأكد من صحة البيانات"));
     } finally {
       setLoading(false);
     }
   };
-
   if (success) {
     return (
       <div className="text-center py-16 animate-fade-in">

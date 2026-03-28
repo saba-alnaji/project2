@@ -4,11 +4,17 @@ import axios from "axios";
 import { cn } from "@/lib/utils";
 
 interface Guarantor {
-  id: string;
+  id?: string;
   idnumber: string;
-  name: string;
+  firstName: string;
+  fatherName?: string;
+  grandfatherName?: string;
+  familyName: string;
+  name: string; 
   job?: string;
   village?: string;
+  neighborhood?: string; 
+  street?: string;       
   phoneNumbers?: string[];
 }
 
@@ -39,6 +45,7 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(`https://localhost:8080/api/Subscription/search-guarantor`, {
+        // التعديل الوحيد هنا: إرسال IDNumber للسيرفر ليعمل البحث
         params: { IDNumber: nationalId.trim() },
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -46,14 +53,19 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
       setSearched(true);
       if (response.data) {
         const data = response.data;
-        setFound({
-          id: data.id,
-          idnumber: data.idnumber,
-          name: `${data.firstName} ${data.familyName}`,
-          job: data.job,
-          village: data.village,
-          phoneNumbers: data.phoneNumbers || [],
-        });
+       setFound({
+    id: data.id,
+idnumber: String(data.IDNumber || data.idNumber || data.idnumber || ""),
+    firstName: data.firstName || data.FirstName || "",
+    fatherName: data.fatherName || data.FatherName || "",
+    grandfatherName: data.grandfatherName || data.GrandfatherName || "",
+    familyName: data.familyName || data.FamilyName || "",
+    name: `${data.firstName || data.FirstName || ""} ${data.fatherName || data.FatherName || ""} ${data.familyName || data.FamilyName || ""}`.trim(),
+    job: data.job || data.Job || "",
+    village: data.village || data.Village || "",
+    neighborhood: data.neighborhood || data.Neighborhood || "",
+    street: data.street || data.Street || ""
+});
       } else {
         setNotFound(true);
       }
@@ -95,7 +107,6 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
       </div>
 
       <div className="max-w-lg mx-auto space-y-5">
-        {/* مؤشر بيانات كفيل محفوظة سابقاً */}
         {previousGuarantor && !searched && (
           <div className="animate-fade-in bg-primary/5 border-2 border-primary/30 rounded-2xl p-4">
             <div className="flex items-center gap-3 mb-3">
@@ -122,7 +133,6 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           </div>
         )}
 
-        {/* حقل البحث */}
         <div className="space-y-3">
           <label className="block text-sm font-semibold text-foreground mb-2">البحث برقم هوية كفيل آخر</label>
           <div className="flex gap-2">
@@ -158,17 +168,18 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           </div>
         </div>
 
-        {/* النتيجة: موجود */}
         {searched && found && (
           <div className="animate-fade-in bg-success-bg border-2 border-success rounded-2xl p-5">
-            <div className="flex items-start gap-3 mb-4">
-              <CheckCircle className="w-6 h-6 text-success mt-0.5 shrink-0" />
-              <div>
-                <h3 className="font-bold text-success text-base">تم العثور على:</h3>
-                <p className="text-foreground font-bold">{found.name}</p>
-                <p className="text-muted-foreground text-sm" dir="ltr">{found.idnumber}</p>
-              </div>
-            </div>
+    <div className="flex items-start gap-3 mb-4">
+      <CheckCircle className="w-6 h-6 text-success mt-0.5 shrink-0" />
+      <div>
+        <h3 className="font-bold text-success text-base">تم العثور على:</h3>
+        {/* يعرض الاسم الكامل */}
+        <p className="text-foreground font-bold">{found.name}</p> 
+        {/* يعرض رقم الهوية */}
+        <p className="text-muted-foreground text-sm" dir="ltr">{found.idnumber}</p> 
+      </div>
+    </div>
             <button
               onClick={() => onGuarantorFound(found)}
               className="w-full py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2"
@@ -179,14 +190,12 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           </div>
         )}
 
-        {/* خطأ سيرفر */}
         {errorMessage && (
           <div className="animate-fade-in bg-destructive/10 border-2 border-destructive rounded-2xl p-4 text-center">
             <p className="text-destructive font-semibold">{errorMessage}</p>
           </div>
         )}
 
-        {/* النتيجة: غير موجود */}
         {searched && notFound && !errorMessage && (
           <div className="animate-fade-in bg-warning-bg border-2 border-warning rounded-2xl p-5">
             <div className="flex items-start gap-3 mb-4">
@@ -206,14 +215,13 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
           </div>
         )}
 
-        {/* زر الرجوع */}
         
       </div>
       <button
           onClick={onBack}
           className="px-10 py-2.5 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 shadow-elevated hover:shadow-accent transition-all"
         >
-          <ArrowRight className="w-5 h-5" />
+          <ArrowRight className="w-4 h-4" />
           السابق
         </button>
     </div>

@@ -14,6 +14,7 @@ const subscriptionSchema = z.object({
   paymentMethodId: z.coerce.number().min(1, "طريقة الدفع مطلوبة"),
   receiptNumber: z.string().min(1, "رقم الوصل مطلوب"),
   ledgerNumber: z.string().min(1, "رقم الدفتر مطلوب"),
+  duration: z.string().optional(),
   note: z.string().optional().default(""),
 });
 
@@ -21,17 +22,21 @@ export type SubscriptionFormData = z.infer<typeof subscriptionSchema>;
 
 interface SubscriptionStepProps {
   onSubmit: (data: SubscriptionFormData) => void;
-  onBack: (currentValues: SubscriptionFormData) => void; // تم التعديل لإرسال القيم الحالية
+  onBack: (currentValues: SubscriptionFormData) => void;
   loading: boolean;
-  initialData?: SubscriptionFormData | null; // إضافة استقبال البيانات المحفوظة
+  initialData?: SubscriptionFormData | null;
 }
 
+// دالة مساعدة لحساب التاريخ بعد سنة
+const calculateEndDate = (startDateStr: string) => {
+  if (!startDateStr) return "";
+  const date = new Date(startDateStr);
+  date.setFullYear(date.getFullYear() + 1);
+  return date.toISOString().split("T")[0];
+};
+
 const today = new Date().toISOString().split("T")[0];
-const oneYearLater = (() => {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().split("T")[0];
-})();
+const oneYearLater = calculateEndDate(today);
 
 const feeByCategory: Record<number, number> = {
   1: 35, // شخص
@@ -45,11 +50,10 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
     handleSubmit,
     watch,
     setValue,
-    getValues, // نحتاجها لجلب القيم عند الضغط على "رجوع"
+    getValues,
     formState: { errors },
   } = useForm<SubscriptionFormData>({
     resolver: zodResolver(subscriptionSchema),
-    // استخدام البيانات المحفوظة إن وجدت، وإلا استخدام القيم الافتراضية
     defaultValues: initialData || {
       subscriptionType: "مكتبة عامة",
       memberClassificationId: 1,
@@ -65,15 +69,22 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
 
   const categoryId = watch("memberClassificationId");
   const amount = watch("amount");
+  const watchedStartDate = watch("startDate"); // مراقبة تاريخ البداية
 
-  // منطق تحديث الرسوم بناءً على التصنيف
+  // تحديث الرسوم بناءً على التصنيف
   useEffect(() => {
-    // نقوم بتحديث المبلغ تلقائياً فقط إذا لم تكن هناك بيانات محفوظة مسبقاً 
-    // (عشان لو رجع المستخدم ولقى سعره اللي عدله ما يرجع يصفر)
     if (!initialData) {
-        setValue("amount", feeByCategory[categoryId] ?? 35);
+      setValue("amount", feeByCategory[categoryId] ?? 35);
     }
   }, [categoryId, setValue, initialData]);
+
+  // تحديث تاريخ النهاية تلقائياً عند تغيير تاريخ البداية
+  useEffect(() => {
+    if (watchedStartDate) {
+      const nextYear = calculateEndDate(watchedStartDate);
+      setValue("endDate", nextYear, { shouldValidate: true });
+    }
+  }, [watchedStartDate, setValue]);
 
   const inputClass = cn(
     "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
@@ -95,8 +106,19 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">مدة الاشتراك</label>
+            <Controller
+              name="duration"
+              control={control}
+              render={({ field }) => (
+                <select {...field} className={inputClass}>
+                  <option value="annual">سنوي</option>
+                </select>
+              )}
+            />
+          </div>
 
-          {/* نوع الاشتراك - Select */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               نوع الاشتراك <span className="text-destructive">*</span>
@@ -111,10 +133,8 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
                 </select>
               )}
             />
-            {errors.subscriptionType && <p className={errorClass}>{errors.subscriptionType.message}</p>}
           </div>
 
-          {/* تصنيف المشترك - Select */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               تصنيف المشترك <span className="text-destructive">*</span>
@@ -128,43 +148,14 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
                   value={field.value}
                   onChange={field.onChange}
                 >
-                  <option value={1}>شخص (35 ₪)</option>
-                  <option value={2}>طالب (25 ₪)</option>
-                  <option value={4}>موظف بلدية (مجاني)</option>
+                  <option value={1}>شخص</option>
+                  <option value={2}>طالب </option>
+                  <option value={4}>موظف بلدية </option>
                 </select>
               )}
             />
-            {errors.memberClassificationId && <p className={errorClass}>{errors.memberClassificationId.message}</p>}
           </div>
 
-          {/* التواريخ */}
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              تاريخ بداية الاشتراك <span className="text-destructive">*</span>
-            </label>
-            <Controller
-              name="startDate"
-              control={control}
-              render={({ field }) => (
-                <input type="date" {...field} className={inputClass} dir="ltr" />
-              )}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">
-              تاريخ نهاية الاشتراك <span className="text-destructive">*</span>
-            </label>
-            <Controller
-              name="endDate"
-              control={control}
-              render={({ field }) => (
-                <input type="date" {...field} className={inputClass} dir="ltr" />
-              )}
-            />
-          </div>
-
-          {/* الرسوم */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">الرسوم (شيكل)</label>
             <div className="relative">
@@ -181,13 +172,42 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
                   />
                 )}
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                ₪
-              </span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">₪</span>
             </div>
           </div>
 
-          {/* طريقة الدفع */}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              تاريخ بداية الاشتراك <span className="text-destructive">*</span>
+            </label>
+            <Controller
+              name="startDate"
+              control={control}
+              render={({ field }) => (
+                <input type="date" {...field} className={inputClass} dir="ltr" />
+              )}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              تاريخ نهاية الاشتراك (تلقائي) <span className="text-destructive">*</span>
+            </label>
+            <Controller
+              name="endDate"
+              control={control}
+              render={({ field }) => (
+                <input 
+                  type="date" 
+                  {...field} 
+                  readOnly 
+                  className={cn(inputClass, "bg-muted cursor-not-allowed opacity-80")} 
+                  dir="ltr" 
+                />
+              )}
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               طريقة الدفع <span className="text-destructive">*</span>
@@ -196,18 +216,13 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
               name="paymentMethodId"
               control={control}
               render={({ field }) => (
-                <select
-                  {...field}
-                  className={inputClass}
-                  onChange={field.onChange}
-                >
+                <select {...field} className={inputClass}>
                   <option value={1}>نقداً</option>
                 </select>
               )}
             />
           </div>
 
-          {/* رقم الوصل */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               رقم الوصل <span className="text-destructive">*</span>
@@ -222,7 +237,6 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
             {errors.receiptNumber && <p className={errorClass}>{errors.receiptNumber.message}</p>}
           </div>
 
-          {/* رقم الدفتر */}
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               رقم الدفتر <span className="text-destructive">*</span>
@@ -237,7 +251,6 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
             {errors.ledgerNumber && <p className={errorClass}>{errors.ledgerNumber.message}</p>}
           </div>
 
-          {/* الملاحظات */}
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-foreground mb-2">ملاحظات</label>
             <Controller
@@ -250,17 +263,15 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
           </div>
         </div>
 
-        {/* ملخص الرسوم */}
         <div className="mt-5 p-4 rounded-2xl bg-primary/5 border-2 border-primary/20 flex justify-between items-center">
           <span className="text-foreground font-semibold">المبلغ المستحق للدفع</span>
           <span className="text-2xl font-black text-primary">{(amount || 0).toFixed(2)} ₪</span>
         </div>
 
-        {/* أزرار التحكم */}
         <div className="flex gap-3 mt-6">
-          <button 
-            type="button" 
-            onClick={() => onBack(getValues())} // إرسال القيم الحالية عند الرجوع
+          <button
+            type="button"
+            onClick={() => onBack(getValues())}
             className="flex-1 py-3 rounded-xl border-2 border-border font-semibold hover:bg-muted transition-all"
           >
             رجوع
