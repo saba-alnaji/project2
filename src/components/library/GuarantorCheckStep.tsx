@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, CheckCircle, AlertCircle, Loader2, UserCheck, ArrowLeft, ArrowRight } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast"; // تم إضافة الاستيراد
 
 interface Guarantor {
   id?: string;
@@ -10,11 +11,11 @@ interface Guarantor {
   fatherName?: string;
   grandfatherName?: string;
   familyName: string;
-  name: string; 
+  name: string;
   job?: string;
   village?: string;
-  neighborhood?: string; 
-  street?: string;       
+  neighborhood?: string;
+  street?: string;
   phoneNumbers?: string[];
 }
 
@@ -27,6 +28,7 @@ interface GuarantorStepProps {
 }
 
 export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, onBack, previousGuarantor, previousGuarantorIsNew }: GuarantorStepProps) {
+  const { toast } = useToast(); // تفعيل التوست
   const [nationalId, setNationalId] = useState("");
   const [loading, setLoading] = useState(false);
   const [found, setFound] = useState<Guarantor | null>(null);
@@ -45,7 +47,6 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(`https://localhost:8080/api/Subscription/search-guarantor`, {
-        // التعديل الوحيد هنا: إرسال IDNumber للسيرفر ليعمل البحث
         params: { IDNumber: nationalId.trim() },
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -53,25 +54,37 @@ export default function GuarantorCheckStep({ onGuarantorFound, onGuarantorNew, o
       setSearched(true);
       if (response.data) {
         const data = response.data;
-       setFound({
-    id: data.id,
-idnumber: String(data.IDNumber || data.idNumber || data.idnumber || ""),
-    firstName: data.firstName || data.FirstName || "",
-    fatherName: data.fatherName || data.FatherName || "",
-    grandfatherName: data.grandfatherName || data.GrandfatherName || "",
-    familyName: data.familyName || data.FamilyName || "",
-    name: `${data.firstName || data.FirstName || ""} ${data.fatherName || data.FatherName || ""} ${data.familyName || data.FamilyName || ""}`.trim(),
-    job: data.job || data.Job || "",
-    village: data.village || data.Village || "",
-    neighborhood: data.neighborhood || data.Neighborhood || "",
-    street: data.street || data.Street || ""
-});
+        setFound({
+          id: data.id,
+          idnumber: String(data.IDNumber || data.idNumber || data.idnumber || ""),
+          firstName: data.firstName || data.FirstName || "",
+          fatherName: data.fatherName || data.FatherName || "",
+          grandfatherName: data.grandfatherName || data.GrandfatherName || "",
+          familyName: data.familyName || data.FamilyName || "",
+          name: `${data.firstName || data.FirstName || ""} ${data.fatherName || data.FatherName || ""} ${data.familyName || data.FamilyName || ""}`.trim(),
+          job: data.job || data.Job || "",
+          village: data.village || data.Village || "",
+          neighborhood: data.neighborhood || data.Neighborhood || "",
+          street: data.street || data.Street || ""
+        });
+        
+        // توست للنجاح
+        toast({
+          title: "تم العثور على الكفيل ✅",
+          description: "تم استرجاع بيانات الكفيل بنجاح.",
+        });
       } else {
         setNotFound(true);
       }
     } catch (err: any) {
       setSearched(true);
       if (err.response?.status === 400) {
+        // بدلاً من التنبيه العادي، نستخدم التوست للخطأ
+        toast({
+          variant: "destructive",
+          title: "خطأ في السيرفر ⚠️",
+          description: "لا يمكن الوصول لقاعدة البيانات حالياً.",
+        });
         setErrorMessage("خطأ في السيرفر: لا يمكن الوصول لقاعدة البيانات حالياً.");
       } else {
         setNotFound(true);
@@ -87,7 +100,7 @@ idnumber: String(data.IDNumber || data.idNumber || data.idnumber || ""),
 
   const getPreviousDisplayName = () => {
     if (!previousGuarantor) return "";
-    return previousGuarantor.name || 
+    return previousGuarantor.name ||
       `${previousGuarantor.firstName || ""} ${previousGuarantor.familyName || ""}`.trim();
   };
 
@@ -170,16 +183,14 @@ idnumber: String(data.IDNumber || data.idNumber || data.idnumber || ""),
 
         {searched && found && (
           <div className="animate-fade-in bg-success-bg border-2 border-success rounded-2xl p-5">
-    <div className="flex items-start gap-3 mb-4">
-      <CheckCircle className="w-6 h-6 text-success mt-0.5 shrink-0" />
-      <div>
-        <h3 className="font-bold text-success text-base">تم العثور على:</h3>
-        {/* يعرض الاسم الكامل */}
-        <p className="text-foreground font-bold">{found.name}</p> 
-        {/* يعرض رقم الهوية */}
-        <p className="text-muted-foreground text-sm" dir="ltr">{found.idnumber}</p> 
-      </div>
-    </div>
+            <div className="flex items-start gap-3 mb-4">
+              <CheckCircle className="w-6 h-6 text-success mt-0.5 shrink-0" />
+              <div>
+                <h3 className="font-bold text-success text-base">تم العثور على:</h3>
+                <p className="text-foreground font-bold">{found.name}</p>
+                <p className="text-muted-foreground text-sm" dir="ltr">{found.idnumber}</p>
+              </div>
+            </div>
             <button
               onClick={() => onGuarantorFound(found)}
               className="w-full py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2"
@@ -215,15 +226,14 @@ idnumber: String(data.IDNumber || data.idNumber || data.idnumber || ""),
           </div>
         )}
 
-        
       </div>
       <button
-          onClick={onBack}
-          className="px-10 py-2.5 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 shadow-elevated hover:shadow-accent transition-all"
-        >
-          <ArrowRight className="w-4 h-4" />
-          السابق
-        </button>
+        onClick={onBack}
+        className="px-10 py-2.5 rounded-xl gradient-primary text-white font-bold flex items-center gap-2 shadow-elevated hover:shadow-accent transition-all"
+      >
+        <ArrowRight className="w-4 h-4" />
+        السابق
+      </button>
     </div>
   );
 }

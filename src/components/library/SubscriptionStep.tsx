@@ -1,9 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { UserCheck, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
+import axios from "axios";
+
+
 
 const subscriptionSchema = z.object({
   subscriptionType: z.string().min(1, "نوع الاشتراك مطلوب"),
@@ -14,37 +17,37 @@ const subscriptionSchema = z.object({
   paymentMethodId: z.coerce.number().min(1, "طريقة الدفع مطلوبة"),
   receiptNumber: z.string().min(1, "رقم الوصل مطلوب"),
   ledgerNumber: z.string().min(1, "رقم الدفتر مطلوب"),
-  duration: z.string().optional(),
   note: z.string().optional().default(""),
+
 });
 
 export type SubscriptionFormData = z.infer<typeof subscriptionSchema>;
 
 interface SubscriptionStepProps {
-  onSubmit: (data: SubscriptionFormData) => void;
+  onSubmit: (data: SubscriptionFormData) => void
   onBack: (currentValues: SubscriptionFormData) => void;
   loading: boolean;
   initialData?: SubscriptionFormData | null;
+
 }
 
-// دالة مساعدة لحساب التاريخ بعد سنة
 const calculateEndDate = (startDateStr: string) => {
-  if (!startDateStr) return "";
+  if (!startDateStr) return ""
   const date = new Date(startDateStr);
   date.setFullYear(date.getFullYear() + 1);
   return date.toISOString().split("T")[0];
+
 };
+
+
 
 const today = new Date().toISOString().split("T")[0];
 const oneYearLater = calculateEndDate(today);
 
-const feeByCategory: Record<number, number> = {
-  1: 35, // شخص
-  2: 25, // طالب
-  4: 0,  // موظف بلدية
-};
-
 export default function SubscriptionStep({ onSubmit, onBack, loading, initialData }: SubscriptionStepProps) {
+  const [classifications, setClassifications] = useState<any[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+
   const {
     control,
     handleSubmit,
@@ -65,20 +68,56 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
       ledgerNumber: "",
       note: "",
     },
+
   });
+
+
 
   const categoryId = watch("memberClassificationId");
   const amount = watch("amount");
-  const watchedStartDate = watch("startDate"); // مراقبة تاريخ البداية
+  const watchedStartDate = watch("startDate");
 
-  // تحديث الرسوم بناءً على التصنيف
+
+
   useEffect(() => {
-    if (!initialData) {
-      setValue("amount", feeByCategory[categoryId] ?? 35);
-    }
-  }, [categoryId, setValue, initialData]);
+    const fetchMetaData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+        const [classRes, paymentRes] = await Promise.all([
+          axios.get("https://localhost:8080/api/MemberClassification", { headers }),
+          axios.get("https://localhost:8080/api/PaymentMethod", { headers })
+        ]);
+        setClassifications(classRes.data);
+        setPaymentMethods(paymentRes.data);
 
-  // تحديث تاريخ النهاية تلقائياً عند تغيير تاريخ البداية
+      } catch (error) {
+        console.error("خطأ في جلب بيانات الاشتراك:", error);
+
+      }
+
+    };
+    fetchMetaData();
+  }, []);
+
+  useEffect(() => {
+    if (classifications.length > 0) {
+      const selectedClass = classifications.find(
+        (c) => Number(c.memberClassificationID) === Number(categoryId)
+      );
+      if (selectedClass) {
+        const name = selectedClass.memberClassificationName;
+        if (name === "طالب") {
+          setValue("amount", 25);
+        } else if (name === "شخص") {
+          setValue("amount", 35);
+        } else if (name === "موظف بلدية") {
+          setValue("amount", 0);
+        }
+      }
+    }
+  }, [categoryId, classifications, setValue]);
+
   useEffect(() => {
     if (watchedStartDate) {
       const nextYear = calculateEndDate(watchedStartDate);
@@ -107,19 +146,6 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">مدة الاشتراك</label>
-            <Controller
-              name="duration"
-              control={control}
-              render={({ field }) => (
-                <select {...field} className={inputClass}>
-                  <option value="annual">سنوي</option>
-                </select>
-              )}
-            />
-          </div>
-
-          <div>
             <label className="block text-sm font-semibold text-foreground mb-2">
               نوع الاشتراك <span className="text-destructive">*</span>
             </label>
@@ -139,6 +165,7 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
             <label className="block text-sm font-semibold text-foreground mb-2">
               تصنيف المشترك <span className="text-destructive">*</span>
             </label>
+
             <Controller
               name="memberClassificationId"
               control={control}
@@ -146,16 +173,25 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
                 <select
                   className={inputClass}
                   value={field.value}
-                  onChange={field.onChange}
+                  onChange={(e) => field.onChange(Number(e.target.value))} // مهم
                 >
-                  <option value={1}>شخص</option>
-                  <option value={2}>طالب </option>
-                  <option value={4}>موظف بلدية </option>
+                  {classifications.length > 0 ? (
+                    classifications.map((c) => (
+                      <option
+                        key={c.memberClassificationID}
+                        value={c.memberClassificationID}
+                      >
+                        {c.memberClassificationName}
+                      </option>
+                    ))
+
+                  ) : (
+                    <option value="">جاري التحميل...</option>
+                  )}
                 </select>
               )}
             />
           </div>
-
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">الرسوم (شيكل)</label>
             <div className="relative">
@@ -171,6 +207,7 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
                     dir="ltr"
                   />
                 )}
+
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">₪</span>
             </div>
@@ -197,12 +234,12 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
               name="endDate"
               control={control}
               render={({ field }) => (
-                <input 
-                  type="date" 
-                  {...field} 
-                  readOnly 
-                  className={cn(inputClass, "bg-muted cursor-not-allowed opacity-80")} 
-                  dir="ltr" 
+                <input
+                  type="date"
+                  {...field}
+                  readOnly
+                  className={cn(inputClass, "bg-muted cursor-not-allowed opacity-80")}
+                  dir="ltr"
                 />
               )}
             />
@@ -212,12 +249,29 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
             <label className="block text-sm font-semibold text-foreground mb-2">
               طريقة الدفع <span className="text-destructive">*</span>
             </label>
+
             <Controller
               name="paymentMethodId"
               control={control}
               render={({ field }) => (
-                <select {...field} className={inputClass}>
-                  <option value={1}>نقداً</option>
+                <select
+                  className={inputClass}
+                  value={field.value}
+                  onChange={(e) => field.onChange(Number(e.target.value))} // مهم
+                >
+
+                  {paymentMethods.length > 0 ? (
+                    paymentMethods.map((m) => (
+                      <option
+                        key={m.paymentMethodID}
+                        value={m.paymentMethodID}
+                      >
+                        {m.paymentMethodName}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">جاري التحميل...</option>
+                  )}
                 </select>
               )}
             />
@@ -233,6 +287,7 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
               render={({ field }) => (
                 <input type="text" {...field} placeholder="أدخل رقم الوصل" className={inputClass} dir="ltr" />
               )}
+
             />
             {errors.receiptNumber && <p className={errorClass}>{errors.receiptNumber.message}</p>}
           </div>
@@ -247,9 +302,11 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
               render={({ field }) => (
                 <input type="text" {...field} placeholder="أدخل رقم الدفتر" className={inputClass} dir="ltr" />
               )}
+
             />
             {errors.ledgerNumber && <p className={errorClass}>{errors.ledgerNumber.message}</p>}
           </div>
+
 
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-foreground mb-2">ملاحظات</label>
@@ -273,8 +330,7 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
             type="button"
             onClick={() => onBack(getValues())}
             className="flex-1 py-3 rounded-xl border-2 border-border font-semibold hover:bg-muted transition-all"
-          >
-            رجوع
+          >  رجوع
           </button>
           <button
             type="submit"
@@ -283,6 +339,7 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
           >
             <Save className="w-5 h-5" />
             {loading ? "جاري الحفظ..." : "حفظ الاشتراك"}
+
           </button>
         </div>
       </form>

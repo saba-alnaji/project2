@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useState, useEffect } from "react"; 
+import { useForm, Controller, useWatch } from "react-hook-form"; 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, Save } from "lucide-react";
@@ -33,7 +33,6 @@ const renewSchema = z.object({
   receiptNumber: z.string().min(1, "رقم الوصل مطلوب"),
   ledgerNumber: z.string().min(1, "رقم الدفتر مطلوب"),
   duration: z.string().optional(),
-
   note: z.string().optional().default(""),
 });
 
@@ -52,6 +51,9 @@ export default function RenewSubscriptionPage() {
   const [renewing, setRenewing] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const [classifications, setClassifications] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+
   const { control, handleSubmit, setValue, reset } = useForm<RenewFormData>({
     resolver: zodResolver(renewSchema),
     defaultValues: {
@@ -64,11 +66,44 @@ export default function RenewSubscriptionPage() {
       receiptNumber: "",
       ledgerNumber: "",
       note: "",
+      duration: "annual"
     },
   });
 
+  // --- جلب بيانات التصنيفات وطرق الدفع عند تحميل الصفحة ---
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const [resClass, resMethods] = await Promise.all([
+          axios.get("https://localhost:8080/api/MemberClassification", { headers }),
+          axios.get("https://localhost:8080/api/PaymentMethod", { headers })
+        ]);
+
+        setClassifications(resClass.data);
+        setPaymentMethods(resMethods.data);
+      } catch (error) {
+        console.error("Error fetching lookup data:", error);
+      }
+    };
+    fetchDropdownData();
+  }, []);
+
+  const watchedStartDate = useWatch({ control, name: "startDate" });
+
+  useEffect(() => {
+    if (watchedStartDate) {
+      const d = new Date(watchedStartDate);
+      if (!isNaN(d.getTime())) {
+        d.setFullYear(d.getFullYear() + 1);
+        setValue("endDate", d.toISOString().split("T")[0]);
+      }
+    }
+  }, [watchedStartDate, setValue]);
+
   // --- 3. تعريف أعمدة الجداول ---
-  // تأكدي أن هذا الكود موجود داخل صفحة RenewSubscriptionPage
   const paymentColumns = [
     {
       field: "paymentDate",
@@ -98,6 +133,7 @@ export default function RenewSubscriptionPage() {
       flex: 1
     }
   ];
+
   const loanColumns = [
     { field: "BookTitle", headerName: "عنوان الكتاب", flex: 2 },
     { field: "LoanDate", headerName: "تاريخ الإعارة", flex: 1 },
@@ -121,7 +157,6 @@ export default function RenewSubscriptionPage() {
       const token = localStorage.getItem("token");
       const commonBody = { idNumber: searchQuery.trim(), memberNumber: null, status: null };
 
-      // استدعاء الثلاث روابط بالتوازي لسرعة الأداء
       const [resSearch, resPayments, resLoans] = await Promise.all([
         axios.post("https://localhost:8080/api/Subscription/search", commonBody, {
           headers: { Authorization: `Bearer ${token}` }
@@ -234,45 +269,32 @@ export default function RenewSubscriptionPage() {
               </div>
             </div>
             <div className="text-left">
-  {(() => {
-    // 1. جلب تاريخ آخر دفعة من المصفوفة التي ظهرت في الـ Preview
-    const lastPayment = subscriber.paymentHistory?.[0];
-    const pDate = lastPayment?.paymentDate; // لاحظي p صغيرة و D كبيرة كما في الصورة
-
-    let isActive = false;
-
-    if (pDate) {
-      const paymentDate = new Date(pDate);
-      const expiryDate = new Date(paymentDate);
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1); // إضافة سنة
-
-      // إذا كان تاريخ الانتهاء أكبر من تاريخ اليوم فهو فعال
-      isActive = expiryDate > new Date();
-    }
-
-    // 2. فحص إضافي: هل السيرفر أرجع رسالة نجاح أو كلمة Active؟
-    if (!isActive && subscriber.status?.toLowerCase().includes("active")) {
-      isActive = true;
-    }
-
-    return (
-      <span className={cn(
-        "px-4 py-1 rounded-xl text-xs font-black shadow-sm border", 
-        isActive 
-          ? "bg-green-500/10 text-green-600 border-green-200" 
-          : "bg-red-500/10 text-red-600 border-red-200"
-      )}>
-        {isActive ? "اشتراك فعّال ✅" : "اشتراك منتهي ⚠️"}
-      </span>
-    );
-  })()}
-</div>
+              {(() => {
+                const lastPayment = subscriber.paymentHistory?.[0];
+                const pDate = lastPayment?.paymentDate;
+                let isActive = false;
+                if (pDate) {
+                  const paymentDate = new Date(pDate);
+                  const expiryDate = new Date(paymentDate);
+                  expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+                  isActive = expiryDate > new Date();
+                }
+                if (!isActive && subscriber.status?.toLowerCase().includes("active")) {
+                  isActive = true;
+                }
+                return (
+                  <span className={cn(
+                    "px-4 py-1 rounded-xl text-xs font-black shadow-sm border", 
+                    isActive ? "bg-green-500/10 text-green-600 border-green-200" : "bg-red-500/10 text-red-600 border-red-200"
+                  )}>
+                    {isActive ? "اشتراك فعّال ✅" : "اشتراك منتهي ⚠️"}
+                  </span>
+                );
+              })()}
+            </div>
           </div>
 
-
-
           <div className="space-y-6">
-            {/*  سجل المدفوعات    */}
             <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-primary" /> سجل المدفوعات السابقة
@@ -286,7 +308,6 @@ export default function RenewSubscriptionPage() {
               </div>
             </div>
 
-            {/*  سجل الإعارات   */}
             <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-primary" /> سجل الإعارات (Borrowing)
@@ -299,7 +320,6 @@ export default function RenewSubscriptionPage() {
                 />
               </div>
             </div>
-
           </div>
 
           {/* نموذج التجديد */}
@@ -310,19 +330,20 @@ export default function RenewSubscriptionPage() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">مدة الاشتراك</label>
-                  <Controller
-                    name="duration"
-                    control={control}
-                    render={({ field }) => (
-                      <select {...field} className={inputClass}>
-                        <option value="annual">سنوي</option>
-                      </select>
-                    )}
-                  />
-
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">تاريخ البداية</label>
+                  <Controller name="startDate" control={control} render={({ field }) => (
+                    <input type="date" {...field} className={inputClass} />
+                  )} />
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">تاريخ النهاية (تلقائي)</label>
+                  <Controller name="endDate" control={control} render={({ field }) => (
+                    <input type="date" {...field} className={cn(inputClass, "bg-muted cursor-not-allowed")} readOnly />
+                  )} />
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-sm font-bold">نوع الاشتراك</label>
                   <Controller name="subscriptionType" control={control} render={({ field }) => (
@@ -338,16 +359,19 @@ export default function RenewSubscriptionPage() {
                   <Controller name="memberClassificationId" control={control} render={({ field }) => (
                     <select
                       className={inputClass}
-                      value={field.value}
+                      {...field}
                       onChange={(e) => {
                         const val = Number(e.target.value);
                         field.onChange(val);
                         setValue("amount", feeByCategory[val] ?? 35);
                       }}
                     >
-                      <option value={1}>شخص</option>
-                      <option value={2}>طالب</option>
-                      <option value={4}>موظف بلدية</option>
+                      {/* عرض الخيارات القادمة من السيرفر */}
+                      {classifications.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
                     </select>
                   )} />
                 </div>
@@ -362,8 +386,17 @@ export default function RenewSubscriptionPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-bold">طريقة الدفع</label>
                   <Controller name="paymentMethodId" control={control} render={({ field }) => (
-                    <select {...field} className={inputClass} onChange={(e) => field.onChange(Number(e.target.value))}>
-                      <option value={1}>نقداً</option>
+                    <select 
+                      {...field} 
+                      className={inputClass} 
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    >
+                       {/* عرض طرق الدفع القادمة من السيرفر */}
+                       {paymentMethods.map((method) => (
+                        <option key={method.id} value={method.id}>
+                          {method.name}
+                        </option>
+                      ))}
                     </select>
                   )} />
                 </div>

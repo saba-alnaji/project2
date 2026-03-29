@@ -34,55 +34,51 @@ interface SubscriberStepProps {
 
 export default function SubscriberStep({ onNext, initialData }: SubscriberStepProps) {
   const [apiCities, setApiCities] = useState<{ id: number, name: string }[]>([]);
-  // 1. استخراج reset من useForm
   const { register, handleSubmit, formState: { errors }, watch, setValue, reset } =
     useForm<SubscriberFormData>({
       resolver: zodResolver(subscriberSchema),
       mode: "onTouched",
-      // نبقي على الـ defaultValues كما هي للتحميل الأول
       defaultValues: initialData || {
         phoneNumbers: [""],
         cityId: "",
       }
     });
 
-  // 2. هذا هو الجزء الأهم: تحديث البيانات عند تغير initialData (عند الرجوع للخلف)
-  // 2. تحديث البيانات عند تغير initialData أو وصول المدن
   useEffect(() => {
-    // لا تقم بعمل reset إلا إذا كانت هناك بيانات أولية (عند الرجوع للخلف)
     if (initialData) {
       const formattedInitialData = {
         ...initialData,
         cityId: initialData.cityId?.toString() || ""
       };
 
-      // الحل السحري: نستخدم setTimeout بسيط لضمان أن الـ DOM 
-      // قد انتهى من رندر قائمة المدن قبل ضبط القيمة
       const timer = setTimeout(() => {
         reset(formattedInitialData);
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [initialData, reset, apiCities]); // أضفنا apiCities هنا كمراقب
+  }, [initialData, reset, apiCities]);
 
-  // 3. دالة جلب المدن (تبقينها كما هي)
   useEffect(() => {
     const fetchCities = async () => {
       try {
-        const response = await axios.get("https://localhost:8080/api/City");
+        const token = localStorage.getItem("token");
+        const response = await axios.get("https://localhost:8080/api/City", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
         setApiCities(Array.isArray(response.data) ? response.data : []);
       } catch (error) {
         console.error("خطأ في جلب المدن:", error);
         setApiCities([]);
       }
     };
+
     fetchCities();
   }, []);
 
-
-
-  // تأمين مصفوفة أرقام الجوال
   const mobile_numbers = watch("phoneNumbers") || [""];
 
   const addMobile = () => setValue("phoneNumbers", [...mobile_numbers, ""]);

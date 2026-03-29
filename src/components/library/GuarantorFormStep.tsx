@@ -103,8 +103,6 @@ export default function GuarantorFormStep({ initialData, onNext, onBack }: Props
             {errors.job && <p className="text-destructive text-[11px] mt-1">{errors.job.message}</p>}
           </div>
 
-          {/* فراغ للمحافظة على التوازن إذا لزم الأمر أو يمكن ترك الحقل الثالث فارغاً */}
-          <div className="hidden lg:block"></div>
 
           {/* الاسم بالعربي */}
           <div className="lg:col-span-3">
@@ -195,7 +193,6 @@ export default function GuarantorFormStep({ initialData, onNext, onBack }: Props
           </div>
         </div>
 
-        {/* أزرار التحكم - متناسقة مع التصميم العام */}
         <div className="flex justify-between mt-8 pt-6">
           <button
             type="button"
