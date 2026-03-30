@@ -1,28 +1,21 @@
-import { useState, useEffect } from "react"; 
-import { useForm, Controller, useWatch } from "react-hook-form"; 
+import { useState, useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, Save } from "lucide-react";
+import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, Save, ChevronDown } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import AgGridTable from "@/components/library/AgGridTable";
 
-// --- 1. الإعدادات والثوابت ---
 const today = new Date().toISOString().split("T")[0];
-const oneYearLater = (() => {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().split("T")[0];
-})();
-
-const feeByCategory: Record<number, number> = {
-  1: 35, // شخص
-  2: 25, // طالب
-  4: 0,  // موظف بلدية
+const calculateEndDate = (startDateStr: string) => {
+  if (!startDateStr) return "";
+  const date = new Date(startDateStr);
+  date.setFullYear(date.getFullYear() + 1);
+  return date.toISOString().split("T")[0];
 };
 
-// --- 2. السكيما ---
 const renewSchema = z.object({
   subscriptionType: z.string().min(1, "نوع الاشتراك مطلوب"),
   memberClassificationId: z.coerce.number().min(1, "تصنيف المشترك مطلوب"),
@@ -32,7 +25,6 @@ const renewSchema = z.object({
   paymentMethodId: z.coerce.number().min(1, "طريقة الدفع مطلوبة"),
   receiptNumber: z.string().min(1, "رقم الوصل مطلوب"),
   ledgerNumber: z.string().min(1, "رقم الدفتر مطلوب"),
-  duration: z.string().optional(),
   note: z.string().optional().default(""),
 });
 
@@ -46,6 +38,7 @@ const inputClass = cn(
 export default function RenewSubscriptionPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchType, setSearchType] = useState<"idNumber" | "memberNumber">("idNumber");
   const [searching, setSearching] = useState(false);
   const [subscriber, setSubscriber] = useState<any>(null);
   const [renewing, setRenewing] = useState(false);
@@ -54,189 +47,199 @@ export default function RenewSubscriptionPage() {
   const [classifications, setClassifications] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
-  const { control, handleSubmit, setValue, reset } = useForm<RenewFormData>({
+  const { control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<RenewFormData>({
     resolver: zodResolver(renewSchema),
     defaultValues: {
       subscriptionType: "مكتبة عامة",
       memberClassificationId: 1,
       startDate: today,
-      endDate: oneYearLater,
+      endDate: calculateEndDate(today),
       amount: 35,
       paymentMethodId: 1,
       receiptNumber: "",
       ledgerNumber: "",
       note: "",
-      duration: "annual"
     },
   });
 
-  // --- جلب بيانات التصنيفات وطرق الدفع عند تحميل الصفحة ---
+  const watchedStartDate = watch("startDate");
+  const categoryId = watch("memberClassificationId");
+  const amount = watch("amount");
+
   useEffect(() => {
-    const fetchDropdownData = async () => {
+    const fetchMetaData = async () => {
       try {
         const token = localStorage.getItem("token");
         const headers = { Authorization: `Bearer ${token}` };
-
         const [resClass, resMethods] = await Promise.all([
           axios.get("https://localhost:8080/api/MemberClassification", { headers }),
           axios.get("https://localhost:8080/api/PaymentMethod", { headers })
         ]);
-
         setClassifications(resClass.data);
         setPaymentMethods(resMethods.data);
-      } catch (error) {
-        console.error("Error fetching lookup data:", error);
-      }
+      } catch (e) { console.error(e); }
     };
-    fetchDropdownData();
+    fetchMetaData();
   }, []);
-
-  const watchedStartDate = useWatch({ control, name: "startDate" });
 
   useEffect(() => {
     if (watchedStartDate) {
-      const d = new Date(watchedStartDate);
-      if (!isNaN(d.getTime())) {
-        d.setFullYear(d.getFullYear() + 1);
-        setValue("endDate", d.toISOString().split("T")[0]);
-      }
+      setValue("endDate", calculateEndDate(watchedStartDate));
     }
   }, [watchedStartDate, setValue]);
 
-  // --- 3. تعريف أعمدة الجداول ---
+  useEffect(() => {
+    const selected = classifications.find(c => Number(c.memberClassificationID) === Number(categoryId));
+    if (selected) {
+      const name = selected.memberClassificationName;
+      if (name === "طالب") setValue("amount", 25);
+      else if (name === "شخص") setValue("amount", 35);
+      else if (name === "موظف بلدية") setValue("amount", 0);
+    }
+  }, [categoryId, classifications, setValue]);
+
   const paymentColumns = [
+    { field: "paymentDate", headerName: "تاريخ الدفع", flex: 1, cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-" },
+    { field: "amount", headerName: "المبلغ", flex: 1, cellRenderer: (p: any) => `${p.value} ₪` },
+    { field: "paymentMethod", headerName: "طريقة الدفع", flex: 1 },
+    { field: "subscriptionType", headerName: "نوع الاشتراك", flex: 1 },
+    { field: "createdBy", headerName: "بواسطة", flex: 1 }
+  ];
+
+  const loanColumns = [
+    { 
+    field: "serial", 
+    headerName: "الباركود", 
+    flex: 1.5,
+    cellRenderer: (p: any) => {
+      if (!p.value) return "-";
+      // نقوم بإضافة الأصفار يدوياً لتطابق الشكل الذي رأيته في الكود الآخر
+      return `0000${p.value}00001`;
+    }
+  },
+    { field: "bookName", headerName: "عنوان الكتاب", flex: 2 },
     {
-      field: "paymentDate",
-      headerName: "تاريخ الدفع",
+      field: "borrowDate", // تعديل من loanDate إلى borrowDate
+      headerName: "تاريخ الإعارة",
       flex: 1,
       cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-"
     },
     {
-      field: "amount",
-      headerName: "المبلغ",
+      field: "returnDate",
+      headerName: "تاريخ الإرجاع",
       flex: 1,
-      cellRenderer: (p: any) => `${p.value} ₪`
+      cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "لم يرجع بعد"
     },
     {
-      field: "paymentMethod",
-      headerName: "طريقة الدفع",
-      flex: 1
-    },
-    {
-      field: "subscriptionType",
-      headerName: "نوع الاشتراك",
-      flex: 1
-    },
-    {
-      field: "createdBy",
-      headerName: "بواسطة",
-      flex: 1
-    }
-  ];
-
-  const loanColumns = [
-    { field: "BookTitle", headerName: "عنوان الكتاب", flex: 2 },
-    { field: "LoanDate", headerName: "تاريخ الإعارة", flex: 1 },
-    { field: "ReturnDate", headerName: "تاريخ الإرجاع", flex: 1 },
-    {
-      field: "Status",
+      field: "returnDate", // نستخدم returnDate لتحديد الحالة
       headerName: "الحالة",
       flex: 1,
-      cellRenderer: (p: any) => p.value === "Returned" ? "تم الإرجاع" : "قيد الإعارة"
+      cellRenderer: (p: any) => {
+        return p.value ?
+          <span className="text-green-600 font-bold">تم الإرجاع</span> :
+          <span className="text-blue-600 font-bold">قيد الإعارة</span>;
+      }
     },
+    { field: "createdBy", headerName: "الموظف المسؤول", flex: 1.2 },
   ];
 
-  // --- 4. دالة البحث المجمعة ---
+  // --- دالة البحث مع تحديث منطق الـ Body بناءً على النوع ---
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
-    setSuccess(false);
     setSubscriber(null);
-
     try {
       const token = localStorage.getItem("token");
-      const commonBody = { idNumber: searchQuery.trim(), memberNumber: null, status: null };
+
+      // التحديث هنا: نرسل القيمة للحقل المختار و null للآخر
+      const body = {
+        idNumber: searchType === "idNumber" ? searchQuery.trim() : null,
+        memberNumber: searchType === "memberNumber" ? searchQuery.trim() : null,
+        status: null
+      };
 
       const [resSearch, resPayments, resLoans] = await Promise.all([
-        axios.post("https://localhost:8080/api/Subscription/search", commonBody, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.post("https://localhost:8080/api/Subscription/payment-history", commonBody, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.post("https://localhost:8080/api/Borrow/Borrow-history", {
-          ...commonBody,
-          pageNumber: 1,
-          pageSize: 50
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        axios.post("https://localhost:8080/api/Subscription/search", body, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.post("https://localhost:8080/api/Subscription/payment-history", body, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.post("https://localhost:8080/api/Borrow/Borrow-history",
+          { ...body, pageNumber: 1, pageSize: 50 }, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
-      const mainInfo = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
-
-      if (mainInfo) {
+      const data = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
+      if (data) {
         setSubscriber({
-          ...mainInfo,
+          ...data,
           paymentHistory: resPayments.data || [],
-          loanHistory: resLoans.data || []
-        });
-        toast({ title: "تم العثور على المشترك وجلب سجلاته ✅" });
-      } else {
-        toast({ title: "المشترك غير موجود", variant: "destructive" });
-      }
-    } catch (error) {
-      toast({ title: "خطأ في جلب البيانات من السيرفر", variant: "destructive" });
-    } finally { setSearching(false); }
-  };
+          // التعديل هنا: الوصول لمصفوفة data داخل الـ response
+loanHistory: resLoans.data.data || []        });
 
-  // --- 5. دالة التجديد ---
+        toast({ title: "تم جلب بيانات المشترك" });
+      }
+    } catch (e) { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }
+    finally { setSearching(false); }
+  };
   const onSubmit = async (data: RenewFormData) => {
-    if (!subscriber) return;
     setRenewing(true);
     try {
       const token = localStorage.getItem("token");
-      const payload = {
+      await axios.post("https://localhost:8080/api/Subscription/renew", {
         userID: subscriber.userID,
-        subscriptionInfo: { ...data }
-      };
-
-      await axios.post("https://localhost:8080/api/Subscription/renew", payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+        subscriptionInfo: data
+      }, { headers: { Authorization: `Bearer ${token}` } });
 
       setSuccess(true);
-      toast({ title: "تم تجديد الاشتراك بنجاح ✅" });
-    } catch (error) {
-      toast({ title: "فشل في عملية التجديد", variant: "destructive" });
-    } finally { setRenewing(false); }
-  };
+      toast({ title: "تم التجديد بنجاح ✅" });
+    } catch (e: any) {
+      const serverMessage = e.response?.data?.message || e.response?.data || "فشل التجديد";
 
+      toast({
+        title: "عذراً، لم يكتمل الطلب",
+        description: serverMessage,
+        variant: "destructive"
+      });
+      console.log("Server Error Response:", e.response?.data);
+    } finally {
+      setRenewing(false);
+    }
+  };
+  // حساب إذا كان الاشتراك الحالي لا يزال ساري المفعول
+  const endDate = subscriber?.subscriptionInfo?.endDate;
+  const isActive = endDate ? new Date(endDate) > new Date() : false;
   return (
     <div className="max-w-5xl mx-auto p-4" dir="rtl">
       <div className="mb-8">
-        <h1 className="text-3xl font-black mb-2 text-foreground">تجديد الاشتراك</h1>
-        <p className="text-muted-foreground">ابحث عن المشترك برقم الهوية لتحديث بياناته والاطلاع على سجلاته.</p>
+        <h1 className="text-3xl font-black mb-2">تجديد الاشتراك</h1>
+        <p className="text-muted-foreground">ابحث عن المشترك بواسطة الهوية أو رقم المشترك لتجديد اشتراكه.</p>
       </div>
 
-      {/* البحث */}
+      {/* البحث مع إضافة خيارات النوع */}
       <div className="bg-card rounded-2xl p-6 border border-border mb-6 shadow-sm">
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="أدخل رقم الهوية للبحث..."
-            className={cn(inputClass, "flex-1")}
-          />
-          <button
-            onClick={handleSearch}
-            disabled={searching}
-            className="px-8 rounded-xl bg-primary text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2"
-          >
-            {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            بحث
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
+              className={cn(inputClass, "pl-10")}
+            />
+          </div>
+
+          <div className="relative">
+            <select
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value as any)}
+              className={cn(inputClass, "appearance-none pr-4 pl-10 min-w-[140px] bg-primary/5 border-primary/20 font-bold")}
+            >
+              <option value="idNumber">رقم الهوية</option>
+              <option value="memberNumber">رقم المشترك</option>
+            </select>
+            <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary pointer-events-none" />
+          </div>
+
+          <button onClick={handleSearch} disabled={searching} className="px-8 rounded-xl bg-primary text-white font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-all">
+            {searching ? <RefreshCw className="animate-spin w-4 h-4" /> : <Search className="w-4 h-4" />} بحث
           </button>
         </div>
       </div>
@@ -244,106 +247,65 @@ export default function RenewSubscriptionPage() {
       {success ? (
         <div className="text-center py-12 bg-card rounded-2xl border border-border">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-4">تم التجديد بنجاح!</h2>
-          <button
-            onClick={() => { setSuccess(false); setSubscriber(null); setSearchQuery(""); reset(); }}
-            className="px-6 py-2 bg-primary text-white rounded-lg font-bold"
-          >
-            تجديد لمشترك آخر
-          </button>
+          <h2 className="text-2xl font-bold">تمت العملية بنجاح!</h2>
+          <button onClick={() => { setSuccess(false); setSubscriber(null); reset(); }} className="mt-4 px-6 py-2 bg-primary text-white rounded-lg">تجديد لمشترك آخر</button>
         </div>
       ) : subscriber && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
 
-          {/* كارت المعلومات الأساسية */}
-          <div className="bg-card rounded-2xl p-6 border-2 border-primary/10 shadow-sm flex items-center justify-between">
+          {/* كارت المعلومات */}
+          <div className="bg-card rounded-2xl p-6 border-2 border-primary/10 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                <UserCheck className="text-primary" />
-              </div>
+              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center"><UserCheck className="text-primary" /></div>
               <div>
-                <h3 className="text-xl font-bold text-foreground">
-                  {subscriber.memberInfo?.firstName} {subscriber.memberInfo?.familyName}
-                </h3>
+                <h3 className="text-xl font-bold">{subscriber.memberInfo?.firstName} {subscriber.memberInfo?.familyName}</h3>
                 <p className="text-sm text-muted-foreground">رقم الهوية: {subscriber.memberInfo?.idnumber}</p>
               </div>
             </div>
-            <div className="text-left">
-              {(() => {
-                const lastPayment = subscriber.paymentHistory?.[0];
-                const pDate = lastPayment?.paymentDate;
-                let isActive = false;
-                if (pDate) {
-                  const paymentDate = new Date(pDate);
-                  const expiryDate = new Date(paymentDate);
-                  expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-                  isActive = expiryDate > new Date();
-                }
-                if (!isActive && subscriber.status?.toLowerCase().includes("active")) {
-                  isActive = true;
-                }
-                return (
-                  <span className={cn(
-                    "px-4 py-1 rounded-xl text-xs font-black shadow-sm border", 
-                    isActive ? "bg-green-500/10 text-green-600 border-green-200" : "bg-red-500/10 text-red-600 border-red-200"
-                  )}>
-                    {isActive ? "اشتراك فعّال ✅" : "اشتراك منتهي ⚠️"}
-                  </span>
-                );
-              })()}
+
+            <div className="flex items-center gap-2">
+              <span className={`px-6 py-1 rounded-full text-m font-bold ${isActive ? "bg-green-200  text-green-700" : "bg-red-100 text-red-700"
+                }`}>
+                {isActive ? "فعال" : "منتهي / لا يوجد اشتراك"}
+              </span>
+            </div>        </div>
+
+          {/* الجداول */}
+          <div className="grid grid-cols-1 gap-6">
+            <div className="bg-card rounded-2xl p-6 border border-border h-[400px] shadow-sm">
+              <h3 className="font-bold mb-4 flex items-center gap-2 text-primary">
+                <CreditCard className="w-5 h-5" /> سجل المدفوعات السابق
+              </h3>
+              <AgGridTable
+                rowData={subscriber.paymentHistory}
+                columnDefs={paymentColumns}
+                pageSize={5}
+              />
             </div>
+
+            {/* سجل الإعارات - العرض كامل */}
+            <div className="bg-card rounded-2xl p-6 border border-border h-[400px] shadow-sm">
+              <h3 className="font-bold mb-4 flex items-center gap-2 text-primary">
+                <BookOpen className="w-5 h-5" /> سجل الإعارات والكتب
+              </h3>
+              <AgGridTable
+                rowData={subscriber.loanHistory}
+                columnDefs={loanColumns}
+                pageSize={5}
+              />
+            </div>
+
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" /> سجل المدفوعات السابقة
-              </h3>
-              <div className="h-[350px] w-full">
-                <AgGridTable
-                  rowData={subscriber.paymentHistory}
-                  columnDefs={paymentColumns}
-                  pageSize={5}
-                />
-              </div>
+          {/* فورم التجديد */}
+          <div className="bg-card rounded-2xl p-8 border border-border shadow-md">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-primary">بيانات التجديد المالي</h2>
+              <p className="text-muted-foreground">قم بتعبئة بيانات الوصل الجديد لتفعيل الاشتراك</p>
             </div>
 
-            <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-primary" /> سجل الإعارات (Borrowing)
-              </h3>
-              <div className="h-[350px] w-full">
-                <AgGridTable
-                  rowData={subscriber.loanHistory}
-                  columnDefs={loanColumns}
-                  pageSize={5}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* نموذج التجديد */}
-          <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
-            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-foreground">
-              <RefreshCw className="w-5 h-5 text-primary" /> تفاصيل التجديد الجديد
-            </h3>
-
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">تاريخ البداية</label>
-                  <Controller name="startDate" control={control} render={({ field }) => (
-                    <input type="date" {...field} className={inputClass} />
-                  )} />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">تاريخ النهاية (تلقائي)</label>
-                  <Controller name="endDate" control={control} render={({ field }) => (
-                    <input type="date" {...field} className={cn(inputClass, "bg-muted cursor-not-allowed")} readOnly />
-                  )} />
-                </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-bold">نوع الاشتراك</label>
                   <Controller name="subscriptionType" control={control} render={({ field }) => (
@@ -357,47 +319,25 @@ export default function RenewSubscriptionPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-bold">تصنيف المشترك</label>
                   <Controller name="memberClassificationId" control={control} render={({ field }) => (
-                    <select
-                      className={inputClass}
-                      {...field}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        field.onChange(val);
-                        setValue("amount", feeByCategory[val] ?? 35);
-                      }}
-                    >
-                      {/* عرض الخيارات القادمة من السيرفر */}
-                      {classifications.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
+                    <select {...field} className={inputClass} onChange={(e) => field.onChange(Number(e.target.value))}>
+                      {classifications.map((c) => (
+                        <option key={c.memberClassificationID} value={c.memberClassificationID}>{c.memberClassificationName}</option>
                       ))}
                     </select>
                   )} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold">الرسوم المستحقة (₪)</label>
-                  <Controller name="amount" control={control} render={({ field }) => (
-                    <input type="number" {...field} className={cn(inputClass, "font-bold text-primary bg-primary/5")} />
+                  <label className="text-sm font-bold">تاريخ البداية</label>
+                  <Controller name="startDate" control={control} render={({ field }) => (
+                    <input type="date" {...field} className={inputClass} />
                   )} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-bold">طريقة الدفع</label>
-                  <Controller name="paymentMethodId" control={control} render={({ field }) => (
-                    <select 
-                      {...field} 
-                      className={inputClass} 
-                      onChange={(e) => field.onChange(Number(e.target.value))}
-                    >
-                       {/* عرض طرق الدفع القادمة من السيرفر */}
-                       {paymentMethods.map((method) => (
-                        <option key={method.id} value={method.id}>
-                          {method.name}
-                        </option>
-                      ))}
-                    </select>
+                  <label className="text-sm font-bold">تاريخ النهاية</label>
+                  <Controller name="endDate" control={control} render={({ field }) => (
+                    <input type="date" {...field} readOnly className={cn(inputClass, "bg-muted cursor-not-allowed")} />
                   )} />
                 </div>
 
@@ -406,6 +346,7 @@ export default function RenewSubscriptionPage() {
                   <Controller name="receiptNumber" control={control} render={({ field }) => (
                     <input {...field} className={inputClass} />
                   )} />
+                  {errors.receiptNumber && <p className="text-red-500 text-xs">{errors.receiptNumber.message}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -413,16 +354,43 @@ export default function RenewSubscriptionPage() {
                   <Controller name="ledgerNumber" control={control} render={({ field }) => (
                     <input {...field} className={inputClass} />
                   )} />
+                  {errors.ledgerNumber && <p className="text-red-500 text-xs">{errors.ledgerNumber.message}</p>}
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">طريقة الدفع</label>
+                  <Controller name="paymentMethodId" control={control} render={({ field }) => (
+                    <select {...field} className={inputClass} onChange={(e) => field.onChange(Number(e.target.value))}>
+                      {paymentMethods.map((m) => (
+                        <option key={m.paymentMethodID} value={m.paymentMethodID}>{m.paymentMethodName}</option>
+                      ))}
+                    </select>
+                  )} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">المبلغ المستحق</label>
+                  <div className="relative">
+                    <Controller name="amount" control={control} render={({ field }) => (
+                      <input type="number" {...field} className={cn(inputClass, "font-black text-xl text-primary")} />
+                    )} />
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold">₪</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-primary/5 rounded-xl border border-primary/20 flex justify-between items-center">
+                <span className="font-bold text-lg">إجمالي المبلغ المطلوب:</span>
+                <span className="text-3xl font-black text-primary">{Number(amount).toFixed(2)} ₪</span>
               </div>
 
               <button
                 type="submit"
                 disabled={renewing}
-                className="w-full mt-6 py-4 bg-primary text-white rounded-xl font-black text-lg shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 bg-primary text-white rounded-xl font-black text-xl shadow-lg hover:scale-[1.01] transition-all flex items-center justify-center gap-3"
               >
-                {renewing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                حفظ وإتمام عملية التجديد
+                {renewing ? <RefreshCw className="animate-spin" /> : <Save />}
+                {renewing ? "جاري المعالجة..." : "تجديد اشتراك المشترك الآن"}
               </button>
             </form>
           </div>
