@@ -25,11 +25,12 @@ export default function LoanPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // دالة مساعدة لتنسيق الباركود (0000 + القيمة + 00001)
-  const formatBarcode = (val: string | number) => {
-    if (!val) return "";
-    return `0000${val}00001`;
-  };
-
+ const formatBarcode = (val: string | number) => {
+  if (!val) return "";
+  const strVal = String(val);
+    if (strVal.length > 10) return strVal; 
+    return `0000${strVal}00001`;
+};
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
@@ -68,24 +69,26 @@ export default function LoanPage() {
     setConfirmOpen(true);
   };
 
-  const handleFinalLoan = async () => {
-    setSaving(true);
-    try {
-      const payload = {
-        memberNumber: subscriberNumber,
-        barcode: bookBarcode, // نرسل القيمة كما هي للسيرفر
-      };
+ const handleFinalLoan = async () => {
+  setSaving(true);
+  try {
+    // نرسل الرقم كما أدخله الموظف في الحقل (مثلاً 9)
+    // لا تستخدمي formatBarcode هنا أبداً
+    const payload = {
+      memberNumber: subscriberNumber,
+      barcode: bookBarcode.trim(), 
+    };
 
-      await axios.post("https://localhost:8080/api/Borrow/borrow", payload, {
-        headers: getAuthHeaders(),
-      });
+    await axios.post("https://localhost:8080/api/Borrow/borrow", payload, {
+      headers: getAuthHeaders(),
+    });
 
-      toast({ title: "تمت عملية الإعارة بنجاح! 📚", variant: "default" });
-      setConfirmOpen(false);
-      setBookBarcode("");
-      setBookTitle("");
-      await loadLoans(subscriberNumber);
-    } catch (error: any) {
+    toast({ title: "تمت عملية الإعارة بنجاح! 📚" });
+    setConfirmOpen(false);
+    setBookBarcode(""); // مسح الحقل بعد النجاح
+    setBookTitle("");
+    await loadLoans(subscriberNumber);
+  }catch (error: any) {
       const errorMsg = error.response?.data?.message || "فشلت العملية";
       toast({ title: "خطأ في العملية", description: errorMsg, variant: "destructive" });
     } finally {
@@ -108,7 +111,7 @@ export default function LoanPage() {
             <UserPlus className="w-5 h-5" /> بيانات المستعير
           </div>
           <div className="space-y-3">
-            <input type="text" placeholder="رقم المشترك (هوية)" value={subscriberNumber} onChange={(e) => setSubscriberNumber(e.target.value)} className={inputClass} />
+            <input type="text" placeholder="رقم المشترك " value={subscriberNumber} onChange={(e) => setSubscriberNumber(e.target.value)} className={inputClass} />
             <div className="grid grid-cols-2 gap-2">
               <input type="text" placeholder="الاسم" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass} />
               <input type="text" placeholder="العائلة" value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass} />
@@ -141,13 +144,14 @@ export default function LoanPage() {
           <div className="h-[350px] w-full border rounded-xl overflow-hidden shadow-inner">
             <AgGridTable
               columnDefs={[
-                { 
-                  field: "serial", 
-                  headerName: "الباركود الكامل", 
-                  flex: 1.5,
-                  // التعديل هنا: عرض الباركود بالتنسيق المطلوب في الجدول
-                  cellRenderer: (p: any) => formatBarcode(p.value) 
-                },
+               { 
+  field: "serial", 
+  headerName: "الباركود الكامل", 
+  flex: 1.5,
+  cellRenderer: (p: any) => {
+    return formatBarcode(p.value);
+  }
+},
                 { field: "bookName", headerName: "العنوان", flex: 2 },
                 { field: "borrowDate", headerName: "تاريخ الإعارة", flex: 1, cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-" },
                 { field: "returnDate", headerName: "الحالة", flex: 1, cellRenderer: (p: any) => p.value ? "✅ تم الإرجاع" : "📖 قيد الإعارة" }
@@ -164,17 +168,19 @@ export default function LoanPage() {
             <DialogTitle className="text-center text-2xl font-black text-primary">مراجعة الإعارة</DialogTitle>
           </DialogHeader>
           
-          <div className="py-6 space-y-4">
-            <div className="p-5 bg-muted/50 border-2 border-dashed border-primary/20 rounded-2xl space-y-3 text-center">
-              <p className="text-sm text-muted-foreground italic">سيتم إعارة الكتاب التالي:</p>
-              <h4 className="text-xl font-black text-primary">{bookTitle || "كتاب مجهول العنوان"}</h4>
-              {/* التعديل هنا: عرض الباركود المنسق في نافذة التأكيد */}
-              <p className="text-sm">الباركود: <span className="font-mono font-bold text-blue-600">{formatBarcode(bookBarcode)}</span></p>
-              <hr className="my-2" />
-              <p className="text-sm text-muted-foreground italic">إلى المشترك:</p>
-              <h4 className="text-lg font-bold">{firstName} {lastName}</h4>
-            </div>
-          </div>
+        <div className="p-5 bg-muted/50 border-2 border-dashed border-primary/20 rounded-2xl space-y-3 text-center">
+  <p className="text-sm text-muted-foreground italic">سيتم إعارة الكتاب التالي:</p>
+  <h4 className="text-xl font-black text-primary">{bookTitle || "كتاب مجهول العنوان"}</h4>
+  
+  {/* هنا المشكلة كانت تتكرر، سنستخدم الدالة الذكية */}
+  <p className="text-sm">الباركود: <span className="font-mono font-bold text-blue-600">
+    {formatBarcode(bookBarcode)} 
+  </span></p>
+  
+  <hr className="my-2" />
+  <p className="text-sm text-muted-foreground italic">إلى المشترك:</p>
+  <h4 className="text-lg font-bold">{firstName} {lastName}</h4>
+</div>
 
           <DialogFooter className="flex gap-3 sm:justify-center">
             <button onClick={() => setConfirmOpen(false)} className="flex-1 py-4 rounded-xl border-2 font-bold hover:bg-muted transition-all">تراجع</button>

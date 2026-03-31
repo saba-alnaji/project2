@@ -1,262 +1,262 @@
-import { useState } from "react";
-import { Search, Save, Edit, Plus, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useRef } from "react";
+import { 
+  Search, Save, Loader2, UserCheck, ShieldCheck, 
+  ChevronRight, X, Plus, UserPlus, Info 
+} from "lucide-react";
+import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
-const governorates = [
-  "أريحا والأغوار", "بيت لحم", "الخليل", "القدس", "دير البلح",
-  "رفح", "سلفيت", "شمال غزة", "طوباس", "طولكرم",
-  "غزة", "قلقيلية", "خان يونس", "نابلس", "جنين", "رام الله والبيرة"
-];
-
-const inputClass = cn(
-  "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
-  "bg-card text-foreground placeholder:text-muted-foreground",
-  "focus:outline-none focus:border-primary"
-);
+// استيراد المكونات
+import SubscriberStep from "@/components/library/SubscriberStep";
+import GuarantorStep from "@/components/library/GuarantorStep"; 
 
 export default function EditSubscriptionPage() {
   const { toast } = useToast();
+  const guarantorRef = useRef<any>(null);
+  
+  // 1. حالات التحكم والبحث
+  const [currentStep, setCurrentStep] = useState(1); 
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchType, setSearchType] = useState<"idNumber" | "memberNumber">("idNumber");
   const [searching, setSearching] = useState(false);
-  const [subscriber, setSubscriber] = useState<any>(null);
-  const [guarantor, setGuarantor] = useState<any>(null);
-  const [subscription, setSubscription] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [showNewGuarantorSearch, setShowNewGuarantorSearch] = useState(false);
+  
+  // 2. حالات البيانات
+  const [userID, setUserID] = useState<number | null>(null);
+  const [memberData, setMemberData] = useState<any>(null);
+  const [guarantorData, setGuarantorData] = useState<any>(null);
 
-  const handleSearch = async () => {
+  // دالة البحث الأولية
+  const handleInitialSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
+    setMemberData(null);
+    setShowNewGuarantorSearch(false);
+    setCurrentStep(1);
+
     try {
-      const { data, error } = await supabase
-        .from("subscribers")
-        .select("*, guarantors(*), subscriptions(*)")
-        .or(`name.ilike.%${searchQuery}%,subscriber_number.eq.${searchQuery},national_id.eq.${searchQuery}`)
-        .limit(1)
-        .single();
+      const token = localStorage.getItem("token");
+      const res = await axios.post("https://localhost:8080/api/Subscription/search", 
+        { [searchType]: searchQuery.trim(), pageNumber: 1, pageSize: 1 },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      if (error || !data) {
-        toast({ title: "لم يتم العثور على المشترك", variant: "destructive" });
-        setSubscriber(null);
-        return;
+      if (res.data && res.data.memberInfo) {
+        const { memberInfo, guarantorInfo, userID: id } = res.data;
+        setUserID(id);
+        setMemberData({
+          ...memberInfo,
+          cityId: (memberInfo.cityId || memberInfo.cityID)?.toString() || "",
+          phoneNumbers: memberInfo.phoneNumbers || [""]
+        });
+        setGuarantorData(guarantorInfo);
+        toast({ title: "تم جلب بيانات الاشتراك بنجاح" });
+      } else {
+        toast({ title: "لا يوجد نتائج لهذا البحث", variant: "destructive" });
       }
-
-      setSubscriber(data);
-      setGuarantor(data.guarantors || null);
-      const subs = data.subscriptions;
-      setSubscription(Array.isArray(subs) ? subs[subs.length - 1] : subs);
-    } catch {
-      toast({ title: "خطأ في البحث", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "خطأ في الاتصال بالسيرفر", variant: "destructive" });
     } finally {
       setSearching(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!subscriber) return;
+  const onFinishUpdate = async (finalGuarantor: any) => {
     setSaving(true);
     try {
-      const { error: subErr } = await supabase.from("subscribers").update({
-        name: subscriber.name,
-        birth_date: subscriber.birth_date,
-        gender: subscriber.gender,
-        national_id: subscriber.national_id,
-        governorate: subscriber.governorate,
-        job: subscriber.job,
-        mobile_numbers: subscriber.mobile_numbers,
-        address: subscriber.address,
-      }).eq("id", subscriber.id);
-      if (subErr) throw subErr;
+      const token = localStorage.getItem("token");
+      const payload = {
+        userID: userID,
+        memberInfo: memberData,
+        guarantorInfo: finalGuarantor 
+      };
 
-      if (guarantor?.id) {
-        const { error: gErr } = await supabase.from("guarantors").update({
-          name: guarantor.name,
-          job: guarantor.job,
-          address: guarantor.address,
-          mobile_numbers: guarantor.mobile_numbers,
-        }).eq("id", guarantor.id);
-        if (gErr) throw gErr;
-      }
+      await axios.put("https://localhost:8080/api/Subscription/update", payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-      if (subscription?.id) {
-        const { error: sErr } = await supabase.from("subscriptions").update({
-          type: subscription.type,
-          category: subscription.category,
-          fee: subscription.fee,
-          receipt_number: subscription.receipt_number,
-          book_number: subscription.book_number,
-          notes: subscription.notes,
-        }).eq("id", subscription.id);
-        if (sErr) throw sErr;
-      }
-
-      toast({ title: "تم حفظ التعديلات بنجاح ✅" });
-    } catch {
-      toast({ title: "خطأ أثناء الحفظ", variant: "destructive" });
+      toast({ title: "تم حفظ كافة التعديلات بنجاح ✅" });
+    } catch (error) {
+      toast({ title: "حدث خطأ أثناء الحفظ", variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
 
-  const addMobile = () => setSubscriber((s: any) => ({ ...s, mobile_numbers: [...(s.mobile_numbers || []), ""] }));
-  const removeMobile = (i: number) => setSubscriber((s: any) => ({ ...s, mobile_numbers: s.mobile_numbers.filter((_: any, idx: number) => idx !== i) }));
+  // مساعد لتنسيق المدخلات في فورم الكفيل
+  const inputClass = (field: string) => "w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-primary outline-none bg-white";
 
   return (
-    <div className="max-w-3xl mx-auto animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-3xl font-black text-foreground mb-1">تعديل بيانات الاشتراك</h1>
-        <p className="text-muted-foreground">حدث معلومات أي اشتراك موجود بالمكتبة.</p>
+    <div className="max-w-5xl mx-auto p-4 pb-20" dir="rtl">
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-black text-slate-900">إدارة وتعديل الاشتراك</h1>
+        <p className="text-slate-500 mt-2">ابحث برقم الهوية أو رقم المشترك لتعديل البيانات</p>
       </div>
 
-      {/* Search */}
-      <div className="bg-card rounded-2xl p-5 shadow-card border border-border mb-6">
-        <h3 className="font-bold text-foreground mb-3">البحث عن مشترك</h3>
-        <div className="flex gap-3">
+      {/* بار البحث العلوي المحدث */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 mb-8 shadow-sm flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1">
           <input
             type="text"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleSearch()}
-            placeholder="ادخل اسم المشترك أو رقمه أو رقم هويته"
-            className={cn(inputClass, "flex-1")}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
+            className="w-full pr-4 pl-4 py-3 rounded-xl border-2 border-slate-100 focus:border-primary outline-none transition-all"
           />
-          <button onClick={handleSearch} disabled={searching} className="px-6 py-3 rounded-xl gradient-primary text-white font-bold shadow-card hover:shadow-elevated transition-all flex items-center gap-2">
-            <Search className="w-4 h-4" />
-            {searching ? "جاري البحث..." : "بحث"}
-          </button>
         </div>
+        <select 
+          value={searchType} 
+          onChange={(e) => setSearchType(e.target.value as any)}
+          className="md:w-48 px-4 py-3 rounded-xl border-2 border-slate-100 font-bold text-primary bg-slate-50 outline-none cursor-pointer"
+        >
+          <option value="idNumber">رقم الهوية</option>
+          <option value="memberNumber">رقم المشترك</option>
+        </select>
+        <button 
+          onClick={handleInitialSearch} 
+          disabled={searching} 
+          className="px-10 py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+        >
+          {searching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+          بحث
+        </button>
       </div>
 
-      {subscriber && (
+      {memberData && (
         <div className="space-y-6">
-          {/* Subscriber Data */}
-          <div className="bg-card rounded-2xl p-6 shadow-card border border-border">
-            <h3 className="font-bold text-foreground mb-4 flex items-center gap-2"><Edit className="w-5 h-5 text-primary" /> بيانات المشترك</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">رقم المشترك</label>
-                <input type="text" value={subscriber.subscriber_number || ""} onChange={e => setSubscriber((s: any) => ({ ...s, subscriber_number: e.target.value }))} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">اسم المشترك</label>
-                <input type="text" value={subscriber.name || ""} onChange={e => setSubscriber((s: any) => ({ ...s, name: e.target.value }))} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">تاريخ الميلاد</label>
-                <input type="date" value={subscriber.birth_date || ""} onChange={e => setSubscriber((s: any) => ({ ...s, birth_date: e.target.value }))} className={inputClass} dir="ltr" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">الجنس</label>
-                <select value={subscriber.gender || ""} onChange={e => setSubscriber((s: any) => ({ ...s, gender: e.target.value }))} className={inputClass}>
-                  <option value="">اختر</option>
-                  <option value="male">ذكر</option>
-                  <option value="female">أنثى</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">رقم الهوية</label>
-                <input type="text" value={subscriber.national_id || ""} onChange={e => setSubscriber((s: any) => ({ ...s, national_id: e.target.value }))} className={inputClass} dir="ltr" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">المحافظة</label>
-                <select value={subscriber.governorate || ""} onChange={e => setSubscriber((s: any) => ({ ...s, governorate: e.target.value }))} className={inputClass}>
-                  <option value="">اختر</option>
-                  {governorates.map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">الوظيفة</label>
-                <input type="text" value={subscriber.job || ""} onChange={e => setSubscriber((s: any) => ({ ...s, job: e.target.value }))} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">العنوان</label>
-                <input type="text" value={subscriber.address || ""} onChange={e => setSubscriber((s: any) => ({ ...s, address: e.target.value }))} className={inputClass} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-foreground mb-2">أرقام الموبايل</label>
-                <div className="space-y-2">
-                  {(subscriber.mobile_numbers || [""]).map((m: string, i: number) => (
-                    <div key={i} className="flex gap-2">
-                      <input type="tel" value={m} onChange={e => {
-                        const nums = [...(subscriber.mobile_numbers || [])];
-                        nums[i] = e.target.value;
-                        setSubscriber((s: any) => ({ ...s, mobile_numbers: nums }));
-                      }} className={cn(inputClass, "flex-1")} dir="ltr" />
-                      {i > 0 && <button onClick={() => removeMobile(i)} className="p-2.5 rounded-xl text-destructive border-2 border-destructive/20 hover:bg-destructive/10"><X className="w-4 h-4" /></button>}
-                    </div>
-                  ))}
-                  <button onClick={addMobile} className="flex items-center gap-2 text-primary text-sm font-medium"><Plus className="w-4 h-4" /> إضافة رقم آخر</button>
-                </div>
-              </div>
+          {/* Stepper */}
+          <div className="flex items-center justify-center gap-6 mb-10">
+            <div className={cn("flex items-center gap-3 px-6 py-3 rounded-2xl font-bold transition-all shadow-sm", 
+              currentStep === 1 ? "bg-primary text-white scale-105 shadow-lg" : "bg-white text-slate-400 border border-slate-100")}>
+              <UserCheck className="w-5 h-5" /> بيانات المشترك
+            </div>
+            <div className="h-px w-16 bg-slate-200 hidden md:block" />
+            <div className={cn("flex items-center gap-3 px-6 py-3 rounded-2xl font-bold transition-all shadow-sm", 
+              currentStep === 2 ? "bg-primary text-white scale-105 shadow-lg" : "bg-white text-slate-400 border border-slate-100")}>
+              <ShieldCheck className="w-5 h-5" /> بيانات الكفيل
             </div>
           </div>
 
-          {/* Guarantor */}
-          {guarantor && (
-            <div className="bg-card rounded-2xl p-6 shadow-card border border-border">
-              <h3 className="font-bold text-foreground mb-4">بيانات الكفيل</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">اسم الكفيل</label>
-                  <input type="text" value={guarantor.name || ""} onChange={e => setGuarantor((g: any) => ({ ...g, name: e.target.value }))} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">الوظيفة</label>
-                  <input type="text" value={guarantor.job || ""} onChange={e => setGuarantor((g: any) => ({ ...g, job: e.target.value }))} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">العنوان</label>
-                  <input type="text" value={guarantor.address || ""} onChange={e => setGuarantor((g: any) => ({ ...g, address: e.target.value }))} className={inputClass} />
-                </div>
-              </div>
+          {/* محتوى المشترك */}
+          {currentStep === 1 && (
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-card animate-in fade-in slide-in-from-right-4">
+              <SubscriberStep 
+                initialData={memberData}
+                onNext={(updated) => { setMemberData(updated); setCurrentStep(2); }}
+              />
             </div>
           )}
 
-          {/* Subscription */}
-          {subscription && (
-            <div className="bg-card rounded-2xl p-6 shadow-card border border-border">
-              <h3 className="font-bold text-foreground mb-4">تفاصيل الاشتراك</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">نوع الاشتراك</label>
-                  <select value={subscription.type || ""} onChange={e => setSubscription((s: any) => ({ ...s, type: e.target.value }))} className={inputClass}>
-                    <option value="public_library">مكتبة عامة</option>
-                    <option value="children_library">مكتبة أطفال</option>
-                  </select>
+          {/* محتوى الكفيل */}
+          {currentStep === 2 && (
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-card animate-in fade-in slide-in-from-left-4">
+              
+              {!showNewGuarantorSearch ? (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 text-slate-800 font-bold text-lg border-b pb-4 mb-4">
+                    <Info className="text-primary w-6 h-6" /> بيانات الكفيل الحالي المرتبط بالاشتراك
+                  </div>
+                  
+                  {/* فورم عرض بيانات الكفيل الحالي (التنسيق الذي طلبته) */}
+                  <div className="space-y-5 p-6 rounded-2xl border-2 border-primary/20 bg-primary/5 mb-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-1">رقم الهوية</label>
+                        <input value={guarantorData?.idNumber || guarantorData?.IDNumber || ""} className={inputClass("")} dir="ltr" readOnly />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-1">الوظيفة</label>
+                        <input value={guarantorData?.job || ""} className={inputClass("")} readOnly />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">الاسم بالعربي</label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <input value={guarantorData?.firstName || ""} className={inputClass("")} readOnly />
+                        <input value={guarantorData?.fatherName || ""} className={inputClass("")} readOnly />
+                        <input value={guarantorData?.grandfatherName || ""} className={inputClass("")} readOnly />
+                        <input value={guarantorData?.familyName || ""} className={inputClass("")} readOnly />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">العنوان</label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input value={guarantorData?.street || ""} className={inputClass("")} readOnly />
+                        <input value={guarantorData?.village || ""} className={inputClass("")} readOnly />
+                        <input value={guarantorData?.neighborhood || ""} className={inputClass("")} readOnly />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">أرقام الجوال</label>
+                      <div className="flex flex-wrap gap-2">
+                        {guarantorData?.phoneNumbers?.map((phone: string, idx: number) => (
+                          <span key={idx} className="bg-white px-4 py-1 rounded-lg border border-slate-200 font-mono text-sm">
+                            {phone}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p 
+                    onClick={() => setShowNewGuarantorSearch(true)}
+                    className="text-primary font-bold cursor-pointer hover:underline text-center flex items-center justify-center gap-2 py-4 bg-primary/5 rounded-xl border border-dashed border-primary/30 transition-all hover:bg-primary/10"
+                  >
+                    <UserPlus className="w-5 h-5" /> هل تريد تغيير الكفيل؟ اضغط هنا للبحث عن كفيل جديد
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">تصنيف المشترك</label>
-                  <select value={subscription.category || ""} onChange={e => setSubscription((s: any) => ({ ...s, category: e.target.value }))} className={inputClass}>
-                    <option value="regular">شخص</option>
-                    <option value="student">طالب</option>
-                    <option value="municipality_employee">موظف بلدية</option>
-                  </select>
+              ) : (
+                <div className="animate-in zoom-in-95">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-bold text-primary flex items-center gap-2 italic">
+                       البحث عن كفيل جديد وتعيينه للاشتراك
+                    </h3>
+                    <button 
+                      onClick={() => setShowNewGuarantorSearch(false)}
+                      className="text-slate-400 hover:text-red-500 text-sm font-bold"
+                    >
+                      إلغاء التغيير
+                    </button>
+                  </div>
+                  <GuarantorStep 
+                    ref={guarantorRef}
+                    onNext={onFinishUpdate} 
+                    onBack={() => setShowNewGuarantorSearch(false)} 
+                  />
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">الرسوم</label>
-                  <input type="number" value={subscription.fee || 0} onChange={e => setSubscription((s: any) => ({ ...s, fee: Number(e.target.value) }))} className={inputClass} dir="ltr" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">رقم الوصل</label>
-                  <input type="text" value={subscription.receipt_number || ""} onChange={e => setSubscription((s: any) => ({ ...s, receipt_number: e.target.value }))} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">رقم الدفتر</label>
-                  <input type="text" value={subscription.book_number || ""} onChange={e => setSubscription((s: any) => ({ ...s, book_number: e.target.value }))} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">ملاحظات</label>
-                  <textarea value={subscription.notes || ""} onChange={e => setSubscription((s: any) => ({ ...s, notes: e.target.value }))} rows={2} className={cn(inputClass, "resize-none")} />
-                </div>
+              )}
+              
+              {/* أزرار التحكم السفلية */}
+              <div className="mt-10 pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4">
+                <button 
+                  onClick={() => setCurrentStep(1)}
+                  className="flex items-center gap-2 text-slate-500 font-bold hover:text-primary transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" /> العودة لبيانات المشترك
+                </button>
+
+                <button 
+                  onClick={() => {
+                    if (showNewGuarantorSearch) {
+                      guarantorRef.current?.submitGuarantor();
+                    } else {
+                      onFinishUpdate(guarantorData);
+                    }
+                  }}
+                  disabled={saving}
+                  className="w-full md:w-auto px-16 py-4 rounded-2xl gradient-primary text-white font-black text-xl flex items-center justify-center gap-3 shadow-xl hover:scale-[1.01] transition-all disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="animate-spin w-6 h-6" /> : <Save className="w-6 h-6" />}
+                  حفظ التعديلات النهائية
+                </button>
               </div>
             </div>
           )}
-
-          <button onClick={handleSave} disabled={saving} className="w-full py-4 rounded-xl gradient-primary text-white font-bold text-lg shadow-card hover:shadow-elevated transition-all flex items-center justify-center gap-2">
-            <Save className="w-5 h-5" />
-            {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
-          </button>
         </div>
       )}
     </div>

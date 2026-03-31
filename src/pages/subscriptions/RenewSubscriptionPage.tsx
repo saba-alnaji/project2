@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, Save, ChevronDown } from "lucide-react";
+import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, RotateCcw, Save, ChevronDown } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -107,19 +107,18 @@ export default function RenewSubscriptionPage() {
   ];
 
   const loanColumns = [
-    { 
-    field: "serial", 
-    headerName: "الباركود", 
-    flex: 1.5,
-    cellRenderer: (p: any) => {
-      if (!p.value) return "-";
-      // نقوم بإضافة الأصفار يدوياً لتطابق الشكل الذي رأيته في الكود الآخر
-      return `0000${p.value}00001`;
-    }
-  },
+    {
+      field: "serial",
+      headerName: "الباركود",
+      flex: 1.5,
+      cellRenderer: (p: any) => {
+        if (!p.value) return "-";
+        return `0000${p.value}00001`;
+      }
+    },
     { field: "bookName", headerName: "عنوان الكتاب", flex: 2 },
     {
-      field: "borrowDate", // تعديل من loanDate إلى borrowDate
+      field: "borrowDate", 
       headerName: "تاريخ الإعارة",
       flex: 1,
       cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-"
@@ -131,7 +130,7 @@ export default function RenewSubscriptionPage() {
       cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "لم يرجع بعد"
     },
     {
-      field: "returnDate", // نستخدم returnDate لتحديد الحالة
+      field: "returnDate", 
       headerName: "الحالة",
       flex: 1,
       cellRenderer: (p: any) => {
@@ -143,7 +142,6 @@ export default function RenewSubscriptionPage() {
     { field: "createdBy", headerName: "الموظف المسؤول", flex: 1.2 },
   ];
 
-  // --- دالة البحث مع تحديث منطق الـ Body بناءً على النوع ---
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
@@ -151,7 +149,6 @@ export default function RenewSubscriptionPage() {
     try {
       const token = localStorage.getItem("token");
 
-      // التحديث هنا: نرسل القيمة للحقل المختار و null للآخر
       const body = {
         idNumber: searchType === "idNumber" ? searchQuery.trim() : null,
         memberNumber: searchType === "memberNumber" ? searchQuery.trim() : null,
@@ -170,10 +167,10 @@ export default function RenewSubscriptionPage() {
         setSubscriber({
           ...data,
           paymentHistory: resPayments.data || [],
-          // التعديل هنا: الوصول لمصفوفة data داخل الـ response
-loanHistory: resLoans.data.data || []        });
+          loanHistory: resLoans.data.data || []
+        });
 
-        toast({ title: "تم جلب بيانات المشترك" });
+        toast({ title: "تم جلب بيانات المشترك✅" });
       }
     } catch (e) { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }
     finally { setSearching(false); }
@@ -202,7 +199,6 @@ loanHistory: resLoans.data.data || []        });
       setRenewing(false);
     }
   };
-  // حساب إذا كان الاشتراك الحالي لا يزال ساري المفعول
   const endDate = subscriber?.subscriptionInfo?.endDate;
   const isActive = endDate ? new Date(endDate) > new Date() : false;
   return (
@@ -268,39 +264,44 @@ loanHistory: resLoans.data.data || []        });
                 }`}>
                 {isActive ? "فعال" : "منتهي / لا يوجد اشتراك"}
               </span>
-            </div>        </div>
+            </div>
+          </div>
 
-          {/* الجداول */}
-          <div className="grid grid-cols-1 gap-6">
-            <div className="bg-card rounded-2xl p-6 border border-border h-[400px] shadow-sm">
-              <h3 className="font-bold mb-4 flex items-center gap-2 text-primary">
-                <CreditCard className="w-5 h-5" /> سجل المدفوعات السابق
-              </h3>
+          {/* سجل المدفوعات السابق */}
+          <div className="bg-card rounded-2xl p-6 border border-border h-[450px] shadow-sm flex flex-col">
+            <h3 className="font-bold mb-4 flex items-center gap-2 text-primary">
+              <CreditCard className="w-5 h-5" /> سجل المدفوعات السابق
+            </h3>
+            <div className="flex-1 overflow-hidden">
               <AgGridTable
                 rowData={subscriber.paymentHistory}
                 columnDefs={paymentColumns}
-                pageSize={5}
+                pageSize={5} // سيظهر 5 صفوف فقط والباقي عبر الأسهم
               />
             </div>
+          </div>
 
-            {/* سجل الإعارات - العرض كامل */}
-            <div className="bg-card rounded-2xl p-6 border border-border h-[400px] shadow-sm">
-              <h3 className="font-bold mb-4 flex items-center gap-2 text-primary">
-                <BookOpen className="w-5 h-5" /> سجل الإعارات والكتب
-              </h3>
+          {/* سجل الإعارات والكتب */}
+          <div className="bg-card rounded-2xl p-6 border border-border h-[450px] shadow-sm flex flex-col">
+            <h3 className="font-bold mb-4 flex items-center gap-2 text-primary">
+              <BookOpen className="w-5 h-5" /> سجل الإعارات والكتب
+            </h3>
+            <div className="flex-1 overflow-hidden">
               <AgGridTable
                 rowData={subscriber.loanHistory}
                 columnDefs={loanColumns}
-                pageSize={5}
+                pageSize={5} // سيظهر 5 صفوف فقط والباقي عبر الأسهم
               />
             </div>
-
           </div>
 
           {/* فورم التجديد */}
           <div className="bg-card rounded-2xl p-8 border border-border shadow-md">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-primary">بيانات التجديد المالي</h2>
+              <h2 className="text-2xl font-bold text-primary flex items-center justify-center gap-2">
+                <RotateCcw className="w-5 h-5" />
+                بيانات التجديد المالي
+              </h2>
               <p className="text-muted-foreground">قم بتعبئة بيانات الوصل الجديد لتفعيل الاشتراك</p>
             </div>
 
