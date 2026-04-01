@@ -18,8 +18,10 @@ const subscriberSchema = z.object({
   gender: z.string().min(1, "يرجى اختيار الجنس"),
   job: z.string().min(1, "الوظيفة مطلوبة"),
   birthDate: z.string().min(1, "تاريخ الميلاد مطلوب"),
-  firstNameEn: z.string().optional(),
-  familyNameEn: z.string().optional(),
+  firstNameEn: z.string() .min(1, "الاسم الأول بالإنجليزي مطلوب")
+    .regex(/^[a-zA-Z\s]+$/, "يجب إدخال حروف إنجليزية فقط"),
+  familyNameEn: z.string().min(1, "اسم العائلة بالإنجليزي مطلوب")
+    .regex(/^[a-zA-Z\s]+$/, "يجب إدخال حروف إنجليزية فقط"),
   street: z.string().optional(),
   village: z.string().optional(),
   neighborhood: z.string().optional(),
@@ -34,7 +36,7 @@ export type SubscriberFormData = z.infer<typeof subscriberSchema>;
 
 interface SubscriberStepProps {
   onNext: (data: SubscriberFormData) => void;
-  initialData?: SubscriberFormData | null; // البيانات القادمة من الأب (في حال العودة للخلف)
+  initialData?: SubscriberFormData | null; 
 }
 
 export default function SubscriberStep({ onNext, initialData }: SubscriberStepProps) {
@@ -50,23 +52,16 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
       }
     });
 
-  // تحديث القيم في حال تغير initialData (عند العودة للخطوة مثلاً)
   useEffect(() => {
     if (initialData) {
       const formattedInitialData = {
         ...initialData,
         cityId: initialData.cityId?.toString() || ""
       };
-      // تأخير بسيط لضمان استقرار الفورم قبل الـ reset
-      const timer = setTimeout(() => {
-        reset(formattedInitialData);
-      }, 50);
-      return () => clearTimeout(timer);
     }
   }, [initialData, reset]);
 
-  // جلب المحافظات من الـ API
-  useEffect(() => {
+ useEffect(() => {
     const fetchCities = async () => {
       try {
         const token = localStorage.getItem("token");
@@ -74,8 +69,12 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
           headers: { Authorization: `Bearer ${token}` }
         });
         setApiCities(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("خطأ في جلب المدن:", error);
+      } catch (error: any) { 
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem("token");
+          window.location.href = "/login"; 
+          return;
+        }
         setApiCities([]);
       }
     };
@@ -172,11 +171,17 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
           </div>
 
           {/* الاسم بالإنجليزي */}
-          <div className="lg:col-span-3">
-            <label className="font-semibold mb-2 block">الاسم بالإنجليزي</label>
+         <div className="lg:col-span-3">
+            <label className="font-semibold mb-2 block">الاسم بالإنجليزي <span className="text-destructive">*</span></label>
             <div className="grid grid-cols-2 gap-3">
-              <input placeholder="First Name" {...register("firstNameEn")} className={inputClass("firstNameEn")} dir="ltr" />
-              <input placeholder="Last Name" {...register("familyNameEn")} className={inputClass("familyNameEn")} dir="ltr" />
+              <div>
+                <input placeholder="First Name" {...register("firstNameEn")} className={inputClass("firstNameEn")} dir="ltr" />
+                {errors.firstNameEn && <p className="text-destructive text-[10px] mt-1">{errors.firstNameEn.message}</p>}
+              </div>
+              <div>
+                <input placeholder="Last Name" {...register("familyNameEn")} className={inputClass("familyNameEn")} dir="ltr" />
+                {errors.familyNameEn && <p className="text-destructive text-[10px] mt-1">{errors.familyNameEn.message}</p>}
+              </div>
             </div>
           </div>
 

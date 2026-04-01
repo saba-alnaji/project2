@@ -66,7 +66,7 @@ export default function RenewSubscriptionPage() {
   const categoryId = watch("memberClassificationId");
   const amount = watch("amount");
 
-  useEffect(() => {
+ useEffect(() => {
     const fetchMetaData = async () => {
       try {
         const token = localStorage.getItem("token");
@@ -75,9 +75,16 @@ export default function RenewSubscriptionPage() {
           axios.get("https://localhost:8080/api/MemberClassification", { headers }),
           axios.get("https://localhost:8080/api/PaymentMethod", { headers })
         ]);
+        
         setClassifications(resClass.data);
         setPaymentMethods(resMethods.data);
-      } catch (e) { console.error(e); }
+      } catch (e: any) { 
+        console.error("خطأ في جلب البيانات الأساسية:", e);
+        if (e.response && e.response.status === 401) {
+          localStorage.removeItem("token");
+          window.location.href = "/login"; 
+          return;
+        }      }
     };
     fetchMetaData();
   }, []);
@@ -142,10 +149,11 @@ export default function RenewSubscriptionPage() {
     { field: "createdBy", headerName: "الموظف المسؤول", flex: 1.2 },
   ];
 
-  const handleSearch = async () => {
+ const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
     setSubscriber(null);
+
     try {
       const token = localStorage.getItem("token");
 
@@ -155,6 +163,7 @@ export default function RenewSubscriptionPage() {
         status: null
       };
 
+      // تنفيذ الطلبات الثلاثة معاً
       const [resSearch, resPayments, resLoans] = await Promise.all([
         axios.post("https://localhost:8080/api/Subscription/search", body, { headers: { Authorization: `Bearer ${token}` } }),
         axios.post("https://localhost:8080/api/Subscription/payment-history", body, { headers: { Authorization: `Bearer ${token}` } }),
@@ -163,6 +172,7 @@ export default function RenewSubscriptionPage() {
       ]);
 
       const data = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
+      
       if (data) {
         setSubscriber({
           ...data,
@@ -170,75 +180,127 @@ export default function RenewSubscriptionPage() {
           loanHistory: resLoans.data.data || []
         });
 
-        toast({ title: "تم جلب بيانات المشترك✅" });
+        toast({ title: "تم جلب بيانات المشترك بنجاح ✅" });
+      } else {
+        toast({ title: "لم يتم العثور على المشترك", variant: "destructive" });
       }
-    } catch (e) { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }
-    finally { setSearching(false); }
-  };
-  const onSubmit = async (data: RenewFormData) => {
-    setRenewing(true);
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post("https://localhost:8080/api/Subscription/renew", {
-        userID: subscriber.userID,
-        subscriptionInfo: data
-      }, { headers: { Authorization: `Bearer ${token}` } });
 
-      setSuccess(true);
-      toast({ title: "تم التجديد بنجاح ✅" });
     } catch (e: any) {
-      const serverMessage = e.response?.data?.message || e.response?.data || "فشل التجديد";
-
-      toast({
-        title: "عذراً، لم يكتمل الطلب",
-        description: serverMessage,
-        variant: "destructive"
-      });
-      console.log("Server Error Response:", e.response?.data);
-    } finally {
-      setRenewing(false);
+      if (e.response && e.response.status === 401) {
+        localStorage.removeItem("token");
+        toast({ 
+          title: "انتهت الجلسة", 
+          description: "الرجاء تسجيل الدخول مجدداً.", 
+          variant: "destructive" 
+        });
+        window.location.href = "/login";
+        return;
+      }
+      console.error("Search Error:", e);
+      toast({ title: "خطأ في الاتصال", description: "تأكد من جودة الإنترنت أو حاول لاحقاً.",variant: "destructive"  });
+    } finally { 
+      setSearching(false); 
     }
   };
+const onSubmit = async (data: RenewFormData) => {
+  setRenewing(true);
+  try {
+    const token = localStorage.getItem("token");
+      await axios.post("https://localhost:8080/api/Subscription/renew", {
+      userID: subscriber.userID,
+      subscriptionInfo: data
+    }, { headers: { Authorization: `Bearer ${token}` } });
+
+    toast({ 
+      title: "تم التجديد بنجاح ✅", 
+      className: "bg-green-600 text-white font-bold" 
+    });
+
+    setSubscriber(null);   
+    setSearchQuery("");    
+    reset();               
+    setSuccess(false);    
+
+  } catch (e: any) {
+    if (e.response && e.response.status === 401) {
+      localStorage.removeItem("token");
+      toast({ 
+        title: "انتهت الجلسة", 
+        description: "يرجى تسجيل الدخول مجدداً لإتمام عملية التجديد.", 
+        variant: "destructive" 
+      });
+      window.location.href = "/login";
+      return;
+    }
+
+    const serverMessage = e.response?.data?.message || e.response?.data || "فشل التجديد";
+    toast({
+      title: "عذراً، لم يكتمل الطلب",
+      description: serverMessage,
+      variant: "destructive"
+    });
+    
+    console.log("Server Error Response:", e.response?.data);
+  } finally {
+    setRenewing(false);
+  }
+};
   const endDate = subscriber?.subscriptionInfo?.endDate;
   const isActive = endDate ? new Date(endDate) > new Date() : false;
   return (
     <div className="max-w-5xl mx-auto p-4" dir="rtl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black mb-2">تجديد الاشتراك</h1>
-        <p className="text-muted-foreground">ابحث عن المشترك بواسطة الهوية أو رقم المشترك لتجديد اشتراكه.</p>
-      </div>
+    <div className="mb-8 flex items-center gap-4">
+  <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center border-2 border-primary/20 shadow-sm">
+    <RotateCcw className="w-8 h-8 text-primary animate-pulse-slow" />
+  </div>
+  <div>
+    <h1 className="text-3xl font-black text-foreground">تجديد الاشتراك</h1>
+    <p className="text-muted-foreground font-medium">تحديث وتجديد ملفات المشتركين المالية</p>
+  </div>
+</div>
 
       {/* البحث مع إضافة خيارات النوع */}
-      <div className="bg-card rounded-2xl p-6 border border-border mb-6 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
-              className={cn(inputClass, "pl-10")}
-            />
-          </div>
+<div className="bg-white rounded-2xl p-4 border border-slate-200 mb-8 shadow-sm flex flex-col md:flex-row gap-3">
+  {/* حقل الإدخال */}
+  <div className="relative flex-1">
+    <input
+      type="text"
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          handleSearch(); // دالة البحث في صفحة التجديد
+        }
+      }}
+      placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
+      className="w-full pr-4 pl-4 py-3 rounded-xl border-2 border-slate-100 focus:border-primary outline-none transition-all"
+    />
+  </div>
 
-          <div className="relative">
-            <select
-              value={searchType}
-              onChange={(e) => setSearchType(e.target.value as any)}
-              className={cn(inputClass, "appearance-none pr-4 pl-10 min-w-[140px] bg-primary/5 border-primary/20 font-bold")}
-            >
-              <option value="idNumber">رقم الهوية</option>
-              <option value="memberNumber">رقم المشترك</option>
-            </select>
-            <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary pointer-events-none" />
-          </div>
+  {/* اختيار نوع البحث - مطابق تماماً لصفحة التعديل */}
+  <select
+    value={searchType}
+    onChange={(e) => setSearchType(e.target.value as any)}
+    className="md:w-48 px-4 py-3 rounded-xl border-2 border-slate-100 font-bold text-primary bg-slate-50 outline-none cursor-pointer"
+  >
+    <option value="idNumber">رقم الهوية</option>
+    <option value="memberNumber">رقم المشترك</option>
+  </select>
 
-          <button onClick={handleSearch} disabled={searching} className="px-8 rounded-xl bg-primary text-white font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-all">
-            {searching ? <RefreshCw className="animate-spin w-4 h-4" /> : <Search className="w-4 h-4" />} بحث
-          </button>
-        </div>
-      </div>
+  {/* زر البحث - مطابق تماماً لصفحة التعديل */}
+  <button
+    onClick={handleSearch}
+    disabled={searching}
+    className="px-10 py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50"
+  >
+    {searching ? (
+      <RefreshCw className="w-5 h-5 animate-spin" /> // أيقونة التحميل في صفحة التجديد
+    ) : (
+      <Search className="w-5 h-5" />
+    )}
+    بحث
+  </button>
+</div>
 
       {success ? (
         <div className="text-center py-12 bg-card rounded-2xl border border-border">

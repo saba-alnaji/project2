@@ -69,20 +69,27 @@ export default function SubscriptionStep({ onSubmit, onBack, loading, initialDat
   const watchedStartDate = watch("startDate");
 
   // جلب البيانات الأساسية من السيرفر
-  useEffect(() => {
+ useEffect(() => {
     const fetchMetaData = async () => {
       try {
         const token = localStorage.getItem("token");
         const headers = { Authorization: `Bearer ${token}` };
+        
         const [classRes, paymentRes] = await Promise.all([
           axios.get("https://localhost:8080/api/MemberClassification", { headers }),
           axios.get("https://localhost:8080/api/PaymentMethod", { headers })
         ]);
+        
         setClassifications(classRes.data);
         setPaymentMethods(paymentRes.data);
-      } catch (error) {
+      } catch (error: any) { 
         console.error("Error fetching subscription meta:", error);
-      }
+
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem("token");
+          window.location.href = "/login"; 
+          return;
+        }      }
     };
     fetchMetaData();
   }, []);
