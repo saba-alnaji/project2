@@ -9,9 +9,7 @@ import { BookOpen, CheckCircle, XCircle, RefreshCw, Search, AlertCircle } from "
 
 const API_BASE_URL = "https://localhost:8080";
 
-
 const getToken = (): string => localStorage.getItem("token") ?? "";
-
 
 const apiFetch = async (path: string, options: RequestInit = {}) => {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -31,7 +29,6 @@ const apiFetch = async (path: string, options: RequestInit = {}) => {
   return null;
 };
 
-
 const inputClass = cn(
   "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
   "bg-card text-foreground placeholder:text-muted-foreground",
@@ -47,7 +44,6 @@ const glassCardClass = cn(
 
 export default function ReturnLoanPage() {
   const { toast } = useToast();
-
 
   const [loans, setLoans] = useState<any[]>([]);
   const [filteredLoans, setFilteredLoans] = useState<any[]>([]);
@@ -71,6 +67,7 @@ export default function ReturnLoanPage() {
 
   const today = new Date();
 
+  // جلب قائمة الإعارات
   const loadLoans = async () => {
     setLoading(true);
     try {
@@ -116,6 +113,7 @@ export default function ReturnLoanPage() {
     }
   };
 
+  // جلب حالات الكتاب وأنواع الغرامات
   const loadLookups = async () => {
     try {
       const [conditions, fines] = await Promise.all([
@@ -137,11 +135,13 @@ export default function ReturnLoanPage() {
         }))
       );
 
-      setReturnForm(f => ({
-        ...f,
-        bookConditionID: conditions?.[0]?.id ?? 0,
-        fineTypeID: fines?.[0]?.id ?? 0,
-      }));
+      // تعيين القيم الافتراضية إذا كانت القوائم غير فارغة
+      if (conditions?.length) {
+        setReturnForm(prev => ({ ...prev, bookConditionID: conditions[0].id }));
+      }
+      if (fines?.length) {
+        setReturnForm(prev => ({ ...prev, fineTypeID: fines[0].id }));
+      }
     } catch (error: any) {
       console.error("Error loading lookups:", error);
       toast({
@@ -152,10 +152,18 @@ export default function ReturnLoanPage() {
     }
   };
 
+  // تحميل البيانات الأساسية عند بدء التشغيل
   useEffect(() => {
     loadLookups();
     loadLoans();
   }, []);
+
+  // إعادة جلب القوائم عند فتح مودال الإرجاع (للتأكد من تحديث البيانات)
+  useEffect(() => {
+    if (returnModal) {
+      loadLookups(); // يمكنك إزالة هذا السطر إذا كنت تريد الاعتماد على الجلب الأولي فقط
+    }
+  }, [returnModal]);
 
   // البحث الديناميكي
   useEffect(() => {
@@ -196,8 +204,14 @@ export default function ReturnLoanPage() {
       });
 
       setReturnModal(null);
-      setReturnForm({ bookConditionID: bookConditions[0]?.value ?? 0, fineAmount: 0, fineTypeID: fineTypes[0]?.value ?? 0, note: "" });
-      loadLoans();
+      // إعادة تعيين النموذج مع الحفاظ على القيم الافتراضية من القوائم
+      setReturnForm({
+        bookConditionID: bookConditions[0]?.value ?? 0,
+        fineAmount: 0,
+        fineTypeID: fineTypes[0]?.value ?? 0,
+        note: "",
+      });
+      loadLoans(); // تحديث قائمة الإعارات
     } catch (error: any) {
       console.error("Return error:", error);
       toast({
@@ -255,10 +269,20 @@ export default function ReturnLoanPage() {
     const row = params.data;
     return (
       <div className="flex flex-col gap-2 items-center justify-center">
-        <motion.button onClick={() => setReturnModal(row)} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white flex items-center gap-1 text-xs font-bold">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setReturnModal(row)}
+          className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-1 text-xs font-bold"
+        >
           <CheckCircle className="w-4 h-4" /> إرجاع
         </motion.button>
-        <motion.button onClick={() => setRenewModal(row)} className="px-3 py-1.5 rounded-lg bg-amber-500 text-white flex items-center gap-1 text-xs font-bold">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setRenewModal(row)}
+          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 text-xs font-bold"
+        >
           <RefreshCw className="w-4 h-4" /> تجديد
         </motion.button>
       </div>
@@ -286,9 +310,11 @@ export default function ReturnLoanPage() {
           </div>
 
           <div className="flex gap-3 flex-wrap">
-            {[{ label: "إعارات نشطة", value: stats.total, color: "bg-blue-500", icon: BookOpen },
+            {[
+              { label: "إعارات نشطة", value: stats.total, color: "bg-blue-500", icon: BookOpen },
               { label: "مستحقة اليوم", value: stats.today, color: "bg-amber-500", icon: AlertCircle },
-              { label: "متأخرة", value: stats.overdue, color: "bg-rose-500", icon: XCircle }].map((stat, idx) => (
+              { label: "متأخرة", value: stats.overdue, color: "bg-rose-500", icon: XCircle },
+            ].map((stat, idx) => (
               <motion.div key={idx} className={`${stat.color} rounded-2xl p-4 text-white shadow-lg min-w-[140px]`}>
                 <div className="flex items-center gap-3">
                   <stat.icon className="w-8 h-8 opacity-90" />
@@ -306,7 +332,13 @@ export default function ReturnLoanPage() {
         <div className={cn(glassCardClass, "p-4 mb-6 flex flex-wrap items-center justify-between gap-4")}>
           <div className="flex items-center gap-3 flex-1 max-w-md relative">
             <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input type="text" placeholder="بحث عن كتاب أو مشترك..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className={cn(inputClass, "pr-10")} />
+            <input
+              type="text"
+              placeholder="بحث عن كتاب أو مشترك..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className={cn(inputClass, "pr-10")}
+            />
           </div>
         </div>
 
@@ -348,30 +380,55 @@ export default function ReturnLoanPage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">حالة الكتاب</label>
-                <select value={returnForm.bookConditionID} onChange={e => setReturnForm(f => ({ ...f, bookConditionID: Number(e.target.value) }))} className={inputClass}>
-                  {bookConditions.map((c, i) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                <select
+                  value={returnForm.bookConditionID}
+                  onChange={e => setReturnForm(f => ({ ...f, bookConditionID: Number(e.target.value) }))}
+                  className={inputClass}
+                >
+                  {bookConditions.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">مبلغ الغرامة (شيكل)</label>
-                <input type="number" value={returnForm.fineAmount} onChange={e => setReturnForm(f => ({ ...f, fineAmount: Number(e.target.value) }))} className={inputClass} dir="ltr" min="0" step="0.5" />
+                <input
+                  type="number"
+                  value={returnForm.fineAmount}
+                  onChange={e => setReturnForm(f => ({ ...f, fineAmount: Number(e.target.value) }))}
+                  className={inputClass}
+                  dir="ltr"
+                  min="0"
+                  step="0.5"
+                />
               </div>
 
               {returnForm.fineAmount > 0 && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">نوع الغرامة</label>
-                  <select value={returnForm.fineTypeID} onChange={e => setReturnForm(f => ({ ...f, fineTypeID: Number(e.target.value) }))} className={inputClass}>
-                    {fineTypes.map((t, i) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  <select
+                    value={returnForm.fineTypeID}
+                    onChange={e => setReturnForm(f => ({ ...f, fineTypeID: Number(e.target.value) }))}
+                    className={inputClass}
+                  >
+                    {fineTypes.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
                   </select>
                 </div>
               )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ملاحظات</label>
-                <textarea value={returnForm.note} onChange={e => setReturnForm(f => ({ ...f, note: e.target.value }))} rows={3} className={cn(inputClass, "resize-none")} placeholder="أضف أي ملاحظات إضافية..." />
+                <textarea
+                  value={returnForm.note}
+                  onChange={e => setReturnForm(f => ({ ...f, note: e.target.value }))}
+                  rows={3}
+                  className={cn(inputClass, "resize-none")}
+                  placeholder="أضف أي ملاحظات إضافية..."
+                />
               </div>
-
             </div>
             <DialogFooter className="p-6 flex justify-end gap-3">
               <Button variant="secondary" onClick={() => setReturnModal(null)}>إلغاء</Button>
