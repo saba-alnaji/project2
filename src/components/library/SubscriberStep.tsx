@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-// المخطط الخاص بالتحقق (Validation Schema) يبقى كما هو
 const subscriberSchema = z.object({
   memberNumber: z.string().min(1, "رقم المشترك مطلوب"),
   idnumber: z.string().length(9, "رقم الهوية يجب أن يكون 9 أرقام").regex(/^\d+$/, "أرقام فقط"),

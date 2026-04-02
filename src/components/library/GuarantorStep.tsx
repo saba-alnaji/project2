@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import axios from "axios";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner"; // ✅ التعديل هنا لـ Sonner
 
 // ================= Types =================
 
@@ -53,7 +53,7 @@ interface GuarantorStepProps {
 
 const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
   const { onNext, onBack, previousGuarantor, previousFormValues } = props;
-  const { toast } = useToast();
+  
   const [nationalId, setNationalId] = useState(previousGuarantor?.idnumber || previousFormValues?.idnumber || "");
   const [searchLoading, setSearchLoading] = useState(false);
   const [foundGuarantor, setFoundGuarantor] = useState<Guarantor | null>(previousGuarantor || null);
@@ -93,14 +93,13 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         onNext({ ...data, guarantorId: 0, isNew: true });
       })();
     } else {
-      toast({ title: "تنبيه", description: "يرجى البحث أو تعبئة البيانات", variant: "destructive" });
+      toast.error("تنبيه: يرجى البحث أو تعبئة البيانات");
     }
   },
-  // التعديل هنا: نرسل كل شيء للأب لكي يتذكر الحالة
   getCurrentValues: () => {
     if (mode === "found") return { ...foundGuarantor, isNew: false };
     if (mode === "new-form") return { ...getValues(), isNew: true };
-    return { idnumber: nationalId, isNew: false }; // في حالة كان لسا بمرحلة البحث
+    return { idnumber: nationalId, isNew: false };
   }
 }));
 
@@ -137,22 +136,28 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         };
         setFoundGuarantor(mapped);
         setMode("found");
-        toast({ title: "تم العثور على الكفيل ✅" });
+        
+        // ✅ استخدام Sonner للنجاح
+        toast.success("تم العثور على الكفيل بنجاح");
+
       } else {
         setNotFound(true);
       }
-    } catch (error: any) { // أضفنا (error: any) هنا
+    } catch (error: any) { 
       setSearched(true);
       
-      // --- إضافة "حارس الأمان" هنا ---
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
-        toast({ title: "انتهت الجلسة، الرجاء تسجيل الدخول مجددًا", variant: "destructive" });
+        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
         window.location.href = "/login"; 
         return;
       }
+
       setNotFound(true);
-      toast({ title: "خطأ في البحث أو لم يتم العثور على الكفيل", variant: "destructive" });
+      // ✅ جلب رسالة الخطأ من الباك إند
+      const serverMsg = error.response?.data?.message || error.response?.data || "خطأ في البحث عن الكفيل";
+      toast.error(serverMsg);
+
     } finally {
       setSearchLoading(false);
     }
@@ -190,7 +195,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
 
   return (
     <div className="w-full max-w-3xl mx-auto animate-fade-in">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className="p-3 rounded-2xl gradient-primary shadow-card">
           <UserCheck className="w-6 h-6 text-white" />
@@ -201,7 +205,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         </div>
       </div>
 
-      {/* Search Input */}
       <div className="space-y-2 mb-6 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
         <label className="block text-sm font-semibold mb-1 mr-1">البحث برقم الهوية</label>
         <div className="flex gap-2">
@@ -224,7 +227,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         </div>
       </div>
 
-      {/* Not Found Alert */}
       {searched && notFound && mode !== "new-form" && (
         <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 mb-4 animate-in zoom-in-95">
           <div className="flex items-center gap-3 mb-3">
@@ -241,7 +243,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         </div>
       )}
 
-      {/* Main Data Form */}
       {(mode === "found" || mode === "new-form") && (
         <div className={cn(
           "space-y-5 p-6 rounded-3xl border-2 animate-in slide-in-from-bottom-4 transition-colors duration-500",
@@ -308,7 +309,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
             </div>
           </div>
 
-          {/* العنوان (اختياري - بدون نجمة) */}
           <div>
             <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>العنوان</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -318,7 +318,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
             </div>
           </div>
 
-          {/* أرقام الجوال */}
           <div>
             <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>
               رقم الجوال {mode === "new-form" && <span className="text-destructive">*</span>}
@@ -354,7 +353,6 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
             </div>
           </div>
 
-          {/* Footer Back Button */}
           <div className="mt-6 pt-4 border-t border-slate-200 flex flex-col items-center gap-2">
             <p className="text-sm text-slate-500 italic text-center">
               هل تريد تغيير الكفيل أو البحث عن رقم هوية آخر؟

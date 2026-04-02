@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, RotateCcw, Save, ChevronDown } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import AgGridTable from "@/components/library/AgGridTable";
 
 const today = new Date().toISOString().split("T")[0];
@@ -36,7 +36,6 @@ const inputClass = cn(
 );
 
 export default function RenewSubscriptionPage() {
-  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"idNumber" | "memberNumber">("idNumber");
   const [searching, setSearching] = useState(false);
@@ -157,52 +156,54 @@ export default function RenewSubscriptionPage() {
 
     try {
       const token = localStorage.getItem("token");
-
       const body = {
         idNumber: searchType === "idNumber" ? searchQuery.trim() : null,
         memberNumber: searchType === "memberNumber" ? searchQuery.trim() : null,
         status: null
       };
 
-      // تنفيذ الطلبات الثلاثة معاً
-      const [resSearch, resPayments, resLoans] = await Promise.all([
-        axios.post("https://localhost:8080/api/Subscription/search", body, { headers: { Authorization: `Bearer ${token}` } }),
+      // 1. طلب البحث الأساسي
+      const resSearch = await axios.post("https://localhost:8080/api/Subscription/search", body, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
+
+      if (!data || !data.memberInfo) {
+        toast.error("عذراً، المشترك غير موجود"); return;
+      }
+
+      const [resPayments, resLoans] = await Promise.all([
         axios.post("https://localhost:8080/api/Subscription/payment-history", body, { headers: { Authorization: `Bearer ${token}` } }),
         axios.post("https://localhost:8080/api/Borrow/Borrow-history",
           { ...body, pageNumber: 1, pageSize: 50 }, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
-      const data = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
+      setSubscriber({
+        ...data,
+        paymentHistory: resPayments.data || [],
+        loanHistory: resLoans.data.data || []
+      });
 
-      if (data) {
-        setSubscriber({
-          ...data,
-          paymentHistory: resPayments.data || [],
-          loanHistory: resLoans.data.data || []
-        });
-
-        toast({ title: "تم جلب بيانات المشترك بنجاح ✅" });
-      } else {
-        toast({ title: "لم يتم العثور على المشترك", variant: "destructive" });
-      }
-
+      toast.success("تم جلب البيانات بنجاح ");
     } catch (e: any) {
-      if (e.response && e.response.status === 401) {
+      console.error("Search Error:", e);
+
+      if (e.response?.status === 401) {
         localStorage.removeItem("token");
-        toast({
-          title: "انتهت الجلسة",
-          description: "الرجاء تسجيل الدخول مجدداً.",
-          variant: "destructive"
-        });
-        window.location.href = "/login";
+        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجدداً"); window.location.href = "/login";
         return;
       }
-      console.error("Search Error:", e);
-      toast({ title: "خطأ في الاتصال", description: "تأكد من جودة الإنترنت أو حاول لاحقاً.", variant: "destructive" });
+      const serverErrorMessage = e.response?.data?.message || e.response?.data || "حدث خطأ غير متوقع";
+
+      toast.error("عذراً، لم يكتمل الطلب", { description: serverErrorMessage });
+
     } finally {
       setSearching(false);
     }
   };
+
+
   const onSubmit = async (data: RenewFormData) => {
     setRenewing(true);
     try {
@@ -212,10 +213,7 @@ export default function RenewSubscriptionPage() {
         subscriptionInfo: data
       }, { headers: { Authorization: `Bearer ${token}` } });
 
-      toast({
-        title: "تم التجديد بنجاح ✅",
-        className: "bg-green-600 text-white font-bold"
-      });
+      toast.success("تم التجديد بنجاح ");
 
       setSubscriber(null);
       setSearchQuery("");
@@ -225,21 +223,15 @@ export default function RenewSubscriptionPage() {
     } catch (e: any) {
       if (e.response && e.response.status === 401) {
         localStorage.removeItem("token");
-        toast({
-          title: "انتهت الجلسة",
-          description: "يرجى تسجيل الدخول مجدداً لإتمام عملية التجديد.",
-          variant: "destructive"
+        toast.error("انتهت الجلسة", {
+          description: "يرجى تسجيل الدخول مجدداً لإتمام عملية التجديد."
         });
         window.location.href = "/login";
         return;
       }
 
       const serverMessage = e.response?.data?.message || e.response?.data || "فشل التجديد";
-      toast({
-        title: "عذراً، لم يكتمل الطلب",
-        description: serverMessage,
-        variant: "destructive"
-      });
+      toast.error("عذراً، لم يكتمل الطلب", { description: serverMessage });
 
       console.log("Server Error Response:", e.response?.data);
     } finally {
@@ -343,7 +335,7 @@ export default function RenewSubscriptionPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className={`px-6 py-1 rounded-full text-m font-bold ${isActive ? "bg-green-200  text-green-700" : "bg-red-100 text-red-700"
+              <span className={`px-6 py-1 rounded-full text-m font-bold ${isActive ? "bg-green-200  text-green-700" : "bg-red-100 text-red-700"
                 }`}>
                 {isActive ? "فعال" : "منتهي / لا يوجد اشتراك"}
               </span>

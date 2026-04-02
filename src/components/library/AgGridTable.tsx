@@ -2,7 +2,8 @@ import { useCallback, useMemo, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from "ag-grid-community";
 import { Download, Printer } from "lucide-react";
-import libraryLogo from "../../assets/library-logo.png"; 
+import * as XLSX from "xlsx";
+import libraryLogo from "../../assets/library-logo.png";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -45,32 +46,58 @@ export default function AgGridTable({
     cellStyle: { whiteSpace: 'normal' as const },
   }), []);
 
-const exportCsv = useCallback(() => {
-  if (!gridRef.current?.api) return;
+  const exportExcel = useCallback(() => {
+    if (!gridRef.current?.api) return;
 
-  const params = {
-    fileName: `${title || "data"}.csv`,
-    prependContent: "\uFEFF", // ضروري جداً للعربي
-    processCellCallback: (params: any) => {
-      const value = params.value;
+    const data: any[] = [];
 
-      // 1. إذا كانت القيمة عبارة عن نص يحتوي على HTML (بسبب الـ Renderers)
-      // سنقوم بتنظيفها للتأكد من تصدير النص فقط
-      if (typeof value === 'string' && value.includes('<')) {
-        return value.replace(/<[^>]*>?/gm, ''); 
-      }
+    gridRef.current.api.forEachNodeAfterFilterAndSort((node) => {
+      if (!node.data) return;
 
-      // 2. استخدام الـ Formatter الذي مررته من الصفحة الأب
-      if (printValueFormatter) {
-        return printValueFormatter(params.column.getColId(), value);
-      }
+      const row: any = {};
 
-      return value;
-    }
-  };
+      columnDefs.forEach((col: any) => {
+        if (col.field === "actions") return;
 
-  gridRef.current.api.exportDataAsCsv(params);
-}, [title, printValueFormatter]);
+        let value = node.data[col.field];
+
+        if (printValueFormatter) {
+          value = printValueFormatter(col.field, value);
+        }
+
+        if (typeof value === "string") {
+          value = value.replace(/<[^>]*>?/gm, "");
+        }
+
+        row[col.headerName] = value ?? "-";
+      });
+
+      data.push(row);
+    });
+
+    if (data.length === 0) return;
+
+    const worksheet = XLSX.utils.json_to_sheet(data, { origin: "A3" } as any);
+
+    XLSX.utils.sheet_add_aoa(
+      worksheet,
+      [[title || "تقرير"]],
+      { origin: "A1" }
+    );
+    const colWidths = Object.keys(data[0] || {}).map((key) => ({
+      wch: Math.max(
+        key.length,
+        ...data.map((row) => (row[key] ? row[key].toString().length : 0))
+      ) + 2
+    }));
+
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
+
+    XLSX.writeFile(workbook, `${title || "data"}.xlsx`);
+  }, [columnDefs, title, printValueFormatter]);
 
   const printTable = useCallback(() => {
     const api = gridRef.current?.api;
@@ -82,7 +109,7 @@ const exportCsv = useCallback(() => {
     });
 
     const cols = columnDefs.filter(c => c.field !== "actions");
-    
+
     const now = new Date();
     const dateStr = now.toLocaleDateString('ar-EG');
     const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
@@ -94,13 +121,22 @@ const exportCsv = useCallback(() => {
 
         if (printValueFormatter) {
           val = printValueFormatter(c.field, val);
-        } else {
-          if (c.field?.toLowerCase().includes('date') && val && val !== "-") {
-            const d = new Date(val);
-            val = isNaN(d.getTime()) ? val : d.toLocaleDateString('ar-EG');
-          }
         }
-        return `<td>${val ?? "-"}</td>`;
+
+        if (
+          (!val || val === row[c.field]) &&
+          c.field?.toLowerCase().includes("date") &&
+          val
+        ) {
+          const d = new Date(val);
+          val = isNaN(d.getTime()) ? val : d.toLocaleDateString("ar-EG");
+        }
+
+
+        if (typeof val === "string") {
+          val = val.replace(/<[^>]*>?/gm, "");
+        }
+        return `<td>${String(val ?? "-")}</td>`;
       }).join("");
       return `<tr>${cells}</tr>`;
     }).join("");
@@ -125,7 +161,30 @@ const exportCsv = useCallback(() => {
           table.data-table th, table.data-table td { border: 1px solid #000; padding: 8px; text-align: center; font-size: 12px; }
           table.data-table th { background: #f0f0f0; }
           .footer-section { margin-top: 50px; display: flex; justify-content: space-between; padding: 0 40px; }
-        </style>
+       @media print {
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  table.data-table {
+    direction: rtl;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  .footer-section {
+    page-break-inside: avoid;
+  }
+}
+          </style>
       </head>
       <body>
         <table class="header-table">
@@ -158,11 +217,7 @@ const exportCsv = useCallback(() => {
           </tbody>
         </table>
 
-        <div class="footer-section">
-          <div style="text-align: center;">ختم المؤسسة<br><br>...........................</div>
-          <div style="text-align: center;">توقيع الموظف المسؤول<br><br>...........................</div>
-        </div>
-
+        
         <script>
           window.onload = () => {
             setTimeout(() => { window.print(); window.close(); }, 700);
@@ -180,18 +235,18 @@ const exportCsv = useCallback(() => {
       {(showExport || showPrint) && (
         <div className="flex gap-2 mb-3 shrink-0">
           {showExport && (
-            <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition-all">
-              <Download className="w-3.5 h-3.5" /> تصدير CSV
+            <button onClick={exportExcel} className="flex items-center gap-1.5 px-4 py-3 rounded-xl text-sm font-medium bg-blue-600 text-white shadow-sm hover:bg-blue-700 transition-all">
+              <Download className="w-4 h-4" /> تصدير Excel
             </button>
           )}
           {showPrint && (
-            <button onClick={printTable} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">
+            <button onClick={printTable} className="flex items-center gap-1.5 px-4 py-3 rounded-xl text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 transition-all">
               <Printer className="w-3.5 h-3.5" /> طباعة التقرير
             </button>
           )}
         </div>
       )}
-      
+
       <div className="rounded-xl overflow-hidden border border-border flex-1 min-h-[500px] bg-white">
         <AgGridReact
           ref={gridRef}

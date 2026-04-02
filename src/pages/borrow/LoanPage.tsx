@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { BookOpen, UserPlus, CheckCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import AgGridTable from "@/components/library/AgGridTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
@@ -12,7 +12,6 @@ const inputClass = cn(
 );
 
 export default function LoanPage() {
-  const { toast } = useToast();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -34,7 +33,63 @@ export default function LoanPage() {
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
 
-
+  const loanColumns = [
+    {
+      field: "serial",
+      headerName: "الباركود",
+      flex: 1.5,
+      minWidth: 150,
+      sortable: true,
+      cellRenderer: (p: any) => p.value ? `0000${p.value}00001` : "-",
+      cellStyle: { textAlign: 'center' }
+    },
+    {
+      field: "bookName",
+      headerName: "عنوان الكتاب",
+      flex: 2,
+      minWidth: 200,
+      sortable: true,
+      cellStyle: { textAlign: 'right' }
+    },
+    {
+      field: "borrowDate",
+      headerName: "تاريخ الإعارة",
+      flex: 1,
+      minWidth: 120,
+      sortable: true,
+      cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-",
+      cellStyle: { textAlign: 'center' }
+    },
+    {
+      field: "returnDate",
+      headerName: "تاريخ الإرجاع",
+      flex: 1,
+      minWidth: 120,
+      sortable: true,
+      cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "لم يرجع بعد",
+      cellStyle: { textAlign: 'center' }
+    },
+    {
+      field: "returnDate",
+      headerName: "الحالة",
+      flex: 1,
+      minWidth: 130,
+      sortable: true,
+      cellRenderer: (p: any) => {
+        return p.value ?
+          <span className="text-green-600 font-bold"> تم الإرجاع</span> :
+          <span className="text-blue-600 font-bold"> قيد الإعارة</span>;
+      },
+      cellStyle: { textAlign: 'center' }
+    },
+    {
+      field: "createdBy",
+      headerName: "الموظف المسؤول",
+      flex: 1.2,
+      minWidth: 140,
+      cellStyle: { textAlign: 'center' }
+    },
+  ];
   const loadLoans = async (mNumber: string) => {
     if (!mNumber || mNumber.length < 3) return;
     try {
@@ -63,10 +118,8 @@ export default function LoanPage() {
 
   const handleOpenConfirm = () => {
     if (!subscriberNumber.trim() || !bookBarcode.trim()) {
-      toast({
-        title: "بيانات ناقصة",
+      toast.error("بيانات ناقصة", {
         description: "يرجى إدخال رقم المشترك وباركود الكتاب أولاً",
-        variant: "destructive",
       });
       return;
     }
@@ -79,20 +132,15 @@ export default function LoanPage() {
         memberID: null,
         bookID: null,
         memberNumber: subscriberNumber,
-        barcode: bookBarcode, // القيمة المباشرة من السكانر
+        barcode: bookBarcode,
       };
 
       await axios.post("https://localhost:8080/api/Borrow/borrow", payload, {
         headers: getAuthHeaders(),
       });
 
-      // في حال النجاح
-      toast({
-        title: "تمت عملية الإعارة بنجاح! 📚",
-        className: "bg-green-600 text-white font-bold"
-      });
+      toast.success("تمت عملية الإعارة بنجاح! ");
 
-      // تصفير الصفحة بالكامل
       setConfirmOpen(false);
       setSubscriberNumber("");
       setFirstName("");
@@ -104,19 +152,15 @@ export default function LoanPage() {
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
-        toast({
-          title: "انتهت الجلسة",
+        toast.error("انتهت الجلسة", {
           description: "يرجى تسجيل الدخول مجدداً.",
-          variant: "destructive"
         });
         window.location.href = "/login";
         return;
       }
       const errorMsg = error.response?.data?.message || "فشلت العملية";
-      toast({
-        title: "خطأ في العملية",
+      toast.error("خطأ في العملية", {
         description: errorMsg,
-        variant: "destructive"
       });
 
     } finally {
@@ -126,7 +170,11 @@ export default function LoanPage() {
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-6 animate-in fade-in duration-500" dir="rtl">
       <div className="flex justify-between items-center mb-4">
+        <div>
         <h1 className="text-3xl font-black text-primary">نظام إعارة الكتب</h1>
+        <p className="text-muted-foreground font-medium"> صفحة لإدارة إعارة الكتب للقراء المسجلين بالمكتبة</p>
+
+        </div>
         <button onClick={() => window.location.reload()} className="p-2 hover:bg-muted rounded-full transition-colors">
           <RefreshCw className="w-5 h-5 text-muted-foreground" />
         </button>
@@ -157,11 +205,6 @@ export default function LoanPage() {
               placeholder="امسح باركود الكتاب بالماسح..."
               value={bookBarcode}
               onChange={(e) => setBookBarcode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && bookBarcode) {
-                  handleOpenConfirm();
-                }
-              }}
               className={inputClass}
             />
 
@@ -182,52 +225,28 @@ export default function LoanPage() {
       </button>
 
       {loans.length > 0 && (
-        <div className="bg-card p-6 rounded-2xl border shadow-sm animate-in slide-in-from-bottom-4">
-          <h3 className="font-bold mb-4 flex justify-between items-center text-primary">
-            الكتب المستعارة حالياً للمشترك
-          </h3>
-          <div className="h-[350px] w-full border rounded-xl overflow-hidden shadow-inner">
+       <div className="bg-card rounded-2xl p-6 border border-border h-[800px] shadow-sm flex flex-col transition-all">
+          
+          <h3 className="font-bold mb-4 flex items-center gap-2 text-primary shrink-0">
+            <BookOpen className="w-5 h-5" /> سجل الإعارات والكتب</h3>
+          <p className="text-muted-foreground font-medium"> صفحة لإدارة إعارة الكتب للقراء المسجلين بالمكتبة.</p>
 
+          
+          <div className="flex-1 overflow-hidden">
             <AgGridTable
               rowData={loans}
-              columnDefs={[
-                {
-                  field: "serial",
-                  headerName: "الباركود الكامل",
-                  flex: 1.5,
-                  minWidth: 150,
-                  sortable: true, // ضيفها يدوياً هون
-                  cellRenderer: (p: any) => formatBarcode(p.value),
-                  cellStyle: { textAlign: 'center' }
-                },
-                {
-                  field: "bookName",
-                  headerName: "العنوان",
-                  flex: 2,
-                  minWidth: 200,
-                  sortable: true,
-                  cellStyle: { textAlign: 'right' }
-                },
-                {
-                  field: "borrowDate",
-                  headerName: "تاريخ الإعارة",
-                  flex: 1,
-                  minWidth: 120,
-                  sortable: true,
-                  cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-",
-                  cellStyle: { textAlign: 'center' }
-                },
-                {
-                  field: "returnDate",
-                  headerName: "الحالة",
-                  flex: 1,
-                  minWidth: 130,
-                  sortable: true,
-                  cellRenderer: (p: any) => p.value ? "✅ تم الإرجاع" : "📖 قيد الإعارة",
-                  cellStyle: { textAlign: 'center' }
-                }
-              ]}
-              enableRtl={true} />
+              columnDefs={loanColumns}
+              pageSize={10}
+              title={`سجل إعارات: ${firstName} ${lastName}`}
+              // دالة التنسيق عند الطباعة لضمان ظهور الباركود والتواريخ صح
+              printValueFormatter={(field, value) => {
+                if (field === 'serial') return value ? `0000${value}00001` : "-";
+                if (field === 'returnDate') return value ? new Date(value).toLocaleDateString('ar-EG') : "لم يرجع بعد";
+                if (field.toLowerCase().includes('date') && value) return new Date(value).toLocaleDateString('ar-EG');
+                return value;
+              }}
+              enableRtl={true}
+            />
           </div>
         </div>
       )}

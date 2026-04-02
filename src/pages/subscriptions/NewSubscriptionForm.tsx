@@ -1,13 +1,13 @@
 import { useState, useRef } from "react";
 import { CheckCircle, Loader2 } from "lucide-react";
 import axios from "axios";
-import { useToast } from "@/hooks/use-toast";
-import StepIndicator from "@/components/library/StepIndicator";
+import { toast } from "sonner"; 
 import SubscriberStep from "@/components/library/SubscriberStep";
 import type { SubscriberFormData } from "@/components/library/SubscriberStep";
 import GuarantorStep from "@/components/library/GuarantorStep";
 import SubscriptionStep from "@/components/library/SubscriptionStep";
 import type { SubscriptionFormData } from "@/components/library/SubscriptionStep";
+import StepIndicator from "@/components/library/StepIndicator";
 
 const steps = [
   { id: 1, label: "بيانات المشترك" },
@@ -16,7 +16,7 @@ const steps = [
 ];
 
 export default function NewSubscriptionForm() {
-  const { toast } = useToast();
+
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -72,7 +72,7 @@ export default function NewSubscriptionForm() {
     setCurrentStep(2);
   };
 
-const handleFinalSubmit = async (finalSubData: SubscriptionFormData) => {
+  const handleFinalSubmit = async (finalSubData: SubscriptionFormData) => {
     if (!subscriberData || !guarantorData) return;
     setLoading(true);
     try {
@@ -107,20 +107,18 @@ const handleFinalSubmit = async (finalSubData: SubscriptionFormData) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      toast({ title: "تم تسجيل الاشتراك بنجاح ✅" });
-      resetForm(); 
+      toast.success("تم تسجيل الاشتراك بنجاح");
+      resetForm();
 
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
-        toast({  title: "انتهت الجلسة، الرجاء تسجيل الدخول مجددًا", variant: "destructive" });
+        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
         window.location.href = "/login";
         return;
       }
 
-      toast({
-        variant: "destructive",
-        title: "خطأ في الحفظ ❌",
+      toast.error("خطأ في الحفظ", {
         description: error.response?.data?.message || "تعذر الاتصال بالسيرفر."
       });
     } finally {

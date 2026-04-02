@@ -4,13 +4,12 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import SubscriberStep from "@/components/library/SubscriberStep";
 import GuarantorStep from "@/components/library/GuarantorStep";
 
 export default function EditSubscriptionPage() {
-  const { toast } = useToast();
   const guarantorRef = useRef<any>(null);
 
   // 1. حالات التحكم والبحث
@@ -70,33 +69,30 @@ export default function EditSubscriptionPage() {
           idnumber: guarantorInfo.idNumber || guarantorInfo.IDNumber || guarantorInfo.idnumber || "",
           phoneNumbers: guarantorInfo.phoneNumbers && guarantorInfo.phoneNumbers.length > 0 ? guarantorInfo.phoneNumbers : [""]
         });
-        toast({ title: "تم جلب بيانات الاشتراك بنجاح" });
+        toast.success("تم جلب بيانات الاشتراك بنجاح");
       } else {
-        toast({ title: "لا يوجد نتائج لهذا البحث", variant: "destructive" });
+        toast.error("لا يوجد نتائج لهذا البحث");
       }
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
-        toast({ title: "انتهت الجلسة، الرجاء تسجيل الدخول مجددًا", variant: "destructive" });
-        window.location.href = "/login";
+        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا"); window.location.href = "/login";
         return;
       }
-      if (error.response && error.response.status === 404) {
-        toast({ title: "لا يوجد نتائج لهذا البحث", variant: "destructive" });
-      }
-      else {
-        toast({ title: "خطأ في الاتصال بالسيرفر أو رقم غير صحيح", variant: "destructive" });
-      }
+      const serverMessage = error.response?.data?.message || error.response?.data || "حدث خطأ في الاتصال بالسيرفر";
+
+      toast.error("عذراً، لم يكتمل الطلب", { description: serverMessage });
+
     } finally {
       setSearching(false);
     }
   };
 
+
   const onFinishUpdate = async (finalGuarantor: any) => {
     const isValidPhones = finalGuarantor.phoneNumbers.every((p: string) => /^\d{10,12}$/.test(p)) && finalGuarantor.phoneNumbers.length > 0;
     if (!isValidPhones) {
-      toast({ title: "يرجى التأكد من صحة أرقام الجوال (10-12 رقم)", variant: "destructive" });
-      return;
+      toast.error("يرجى التأكد من صحة أرقام الجوال (10-12 رقم)"); return;
     }
     setSaving(true);
     try {
@@ -113,8 +109,7 @@ export default function EditSubscriptionPage() {
       await axios.put("https://localhost:8080/api/Subscription/update", payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      toast({ title: "تم حفظ كافة التعديلات بنجاح ✅" });
-      setMemberData(null);
+      toast.success("تم حفظ كافة التعديلات بنجاح"); setMemberData(null);
       setUserID(null);
       setSearchQuery("");
       setCurrentStep(1);
@@ -124,11 +119,11 @@ export default function EditSubscriptionPage() {
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
-        toast({ title: "انتهت الجلسة، الرجاء تسجيل الدخول مجددًا", variant: "destructive" });
+        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
         window.location.href = "/login";
         return;
       }
-      toast({ title: "حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً", variant: "destructive" });
+      toast.error("حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً");
     } finally {
       setSaving(false);
     }
