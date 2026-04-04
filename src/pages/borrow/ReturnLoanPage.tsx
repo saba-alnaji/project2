@@ -67,30 +67,31 @@ export default function ReturnLoanPage() {
   const [stats, setStats] = useState({ total: 0, today: 0 });
 
  const loadInitialData = async () => {
-    try {
-      const [loansData, conditions, fines] = await Promise.all([
-        apiFetch("/api/Borrow/list"),
-        apiFetch("/api/BookCondition"),
-        apiFetch("/api/FineType"),
-      ]);
-      const activeLoans = (loansData || []).filter((l: any) => l.delayDays <= 0);
-      setLoans(activeLoans);
-      setFilteredLoans([]); 
-      setBookConditions(conditions || []);
-      setFineTypes(fines || []);
+  try {
+    const [loansData, conditions, fines] = await Promise.all([
+      apiFetch("/api/Borrow/list?status=Active"),
+      apiFetch("/api/BookCondition"),
+      apiFetch("/api/FineType"),
+    ]);
 
-      setStats({
-        total: activeLoans.length,
-        today: activeLoans.filter((l: any) => 
-          new Date(l.startDate).toDateString() === new Date().toDateString()
-        ).length,
-      });
+    // نستخدم loansData مباشرة لأن السيرفر فلترها لنا
+    const data = loansData || [];
+    setLoans(data);
+    setFilteredLoans([]); 
+    setBookConditions(conditions || []);
+    setFineTypes(fines || []);
 
-    } catch (error) {
-      toast.error("فشل في جلب البيانات من السيرفر");
-      console.error(error);
-    }
-  };
+    setStats({
+      total: data.length,
+      today: data.filter((l: any) => 
+        new Date(l.startDate).toDateString() === new Date().toDateString()
+      ).length,
+    });
+
+  } catch (error) {
+    toast.error("فشل في جلب البيانات من السيرفر");
+  }
+};
 
   useEffect(() => {
     loadInitialData();
@@ -261,7 +262,7 @@ export default function ReturnLoanPage() {
         {/* 2. مودال الإرجاع */}
         <Dialog open={!!returnModal} onOpenChange={() => setReturnModal(null)}>
           <DialogContent className={cn(glassCardClass, "p-0 overflow-hidden max-w-lg border-none")}>
-            <div className="bg-emerald-600 p-6 text-white">
+            <div className="bg-emerald-600 p-4 text-white">
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                   <CheckCircle className="w-7 h-7" /> إرجاع كتاب
@@ -270,7 +271,7 @@ export default function ReturnLoanPage() {
               <p className="text-emerald-50 text-sm mt-1">كتاب: {returnModal?.bookTitle} | مستعير: {returnModal?.fullName}</p>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-2 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 
                 {/* حقل حالة الكتاب */}
@@ -321,7 +322,7 @@ export default function ReturnLoanPage() {
               {/* مبلغ الغرامة - استبدلت DollarSign بـ CircleDollarSign */}
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CircleDollarSign className="w-4 h-4 text-muted-foreground" /> مبلغ الغرامة (إن وجد)
+                   مبلغ الغرامة (إن وجد)
                 </label>
                 <div className="relative">
                   <input
@@ -340,7 +341,7 @@ export default function ReturnLoanPage() {
                   <MessageSquare className="w-4 h-4 text-muted-foreground" /> ملاحظات إضافية
                 </label>
                 <textarea
-                  className={cn(inputClass, "h-24 resize-none")}
+                  className={cn(inputClass, "h-20 resize-none")}
                   placeholder="اكتب أي ملاحظة عن حالة الكتاب..."
                   value={returnForm.note}
                   onChange={e => setReturnForm({ ...returnForm, note: e.target.value })}

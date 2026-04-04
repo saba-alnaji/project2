@@ -44,6 +44,8 @@ export default function AgGridTable({
     suppressMovable: true,
     wrapText: true,
     cellStyle: { whiteSpace: 'normal' as const },
+    // التعديل: إضافة قراءة القيمة للتلميح (Tooltip)
+    tooltipValueGetter: (p: any) => p.value,
   }), []);
 
   const exportExcel = useCallback(() => {
@@ -258,6 +260,8 @@ export default function AgGridTable({
           paginationPageSize={pageSize}
           enableRtl={true}
           animateRows={true}
+          // التعديل: تفعيل خاصية تلميحات المتصفح
+          enableBrowserTooltips={true}
         />
       </div>
     </div>
