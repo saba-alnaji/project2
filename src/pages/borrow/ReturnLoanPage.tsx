@@ -224,7 +224,7 @@ export default function ReturnLoanPage() {
         </div>
 
         {/* Main Table Container */}
-        <div className={cn(glassCardClass, "bg-card p-6 h-[750px] flex flex-col")}>
+        <div className={cn(glassCardClass, "bg-card p-6 h-[800px] flex flex-col")}>
           <AgGridTable
             columnDefs={[
               { field: "memberNumber", headerName: "رقم المشترك", flex: 1 },

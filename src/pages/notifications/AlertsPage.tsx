@@ -11,33 +11,6 @@ import {
   Clock,
 } from "lucide-react";
 
-const API_BASE_URL = "https://localhost:8080";
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem("token");
-      toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
-      setTimeout(() => {
-        window.location.href = "/login";
-      }, 1500);
-      return Promise.reject(error);
-    }
-    return Promise.reject(error);
-  },
-);
 
 const glassCardClass = cn(
   "backdrop-blur-md bg-white/90 dark:bg-gray-900/90",
@@ -52,7 +25,12 @@ export default function AlertsPage() {
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      const response = await api.get("/api/Borrow/list");
+      // الطريقة التي تفضلينها: جلب التوكن يدوياً وتمريره في الهيدرز
+      const token = localStorage.getItem("token");
+      const response = await axios.get(`https://localhost:8080/api/Borrow/list`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
       const data = response.data;
       const today = new Date();
 
@@ -61,6 +39,7 @@ export default function AlertsPage() {
           const expectedDate = new Date(loan.endDate);
           const diffTime = expectedDate.getTime() - today.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          // عرض التنبيهات للكتب التي بقي على موعدها 13 يوماً أو أقل ولم تنتهِ بعد
           return diffDays <= 13 && diffDays >= 0;
         })
         .map((loan: any) => ({
@@ -73,8 +52,16 @@ export default function AlertsPage() {
 
       setAlerts(filtered);
     } catch (err: any) {
-      if (err.response?.status !== 401)
-        toast.error("حدث خطأ أثناء جلب البيانات");
+      // معالجة الـ 401 يدوياً داخل الـ catch
+      if (err.response && err.response.status === 401) {
+        localStorage.removeItem("token");
+        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 1500);
+        return;
+      }
+      toast.error("حدث خطأ أثناء جلب البيانات");
     } finally {
       setLoading(false);
     }
@@ -93,19 +80,15 @@ export default function AlertsPage() {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-7xl mx-auto space-y-8"
       >
+        {/* الهيدر والكروت الإحصائية */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <div className="p-4 bg-rose-500 rounded-2xl shadow-lg text-white">
               <Bell className="w-8 h-8" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-slate-800">
-                {" "}
-                تنبيهات الإعارة
-              </h1>
-              <p className="text-slate-500 font-medium">
-                نظام مراقبة مواعيد تسليم الكتب
-              </p>
+              <h1 className="text-3xl font-black text-slate-800">تنبيهات الإعارة</h1>
+              <p className="text-slate-500 font-medium">نظام مراقبة مواعيد تسليم الكتب</p>
             </div>
           </div>
 
@@ -117,86 +100,67 @@ export default function AlertsPage() {
               bg="bg-blue-50"
             />
             <StatCard 
-  icon={<Hourglass className="text-rose-600" />} 
-  label="مستحق قريباً" 
-  value={criticalCount} 
-  bg="bg-rose-50" 
-/>
+              icon={<Hourglass className="text-rose-600" />} 
+              label="مستحق قريباً" 
+              value={criticalCount} 
+              bg="bg-rose-50" 
+            />
           </div>
         </div>
 
-        <div
-          className={cn(
-            glassCardClass,
-            "bg-card p-4 h-[800px] flex flex-col border-none shadow-xl",
-          )}
-        >
+        {/* الجدول */}
+        <div className={cn(glassCardClass, "bg-card p-4 h-[800px] flex flex-col border-none shadow-xl")}>
           <AgGridTable
             columnDefs={[
               { field: "memberNumber", headerName: "رقم المشترك", flex: 0.8 },
-    {
-      field: "fullName",
-      headerName: "اسم المشترك",
-      flex: 1,
-      cellRenderer: (p: any) => (
-        <span className="font-bold">{p.value}</span>
-      ),
-    },
-    { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.3 },
-    {
-      field: "serialNumber", 
-      headerName: "رقم التسلسل",
-      flex: 1,
-      cellRenderer: (p: any) => <span>{p.value}</span>,
-    },
-    {
-      field: "phoneNumber",
-      headerName: "الجوال",
-      flex: 1,
-      cellRenderer: (p: any) => (
-        <div className="flex items-center gap-2 font-bold">
-          <Phone size={14} className="text-slate-400" />
-          {p.value || "غير مسجل"}
-        </div>
-      ),
-    },
-    {
-      field: "endDate",
-      headerName: "تاريخ الاستحقاق",
-      flex: 1,
-      valueFormatter: (p: any) =>
-        new Date(p.value).toLocaleDateString("ar-EG"),
-    },
+              {
+                field: "fullName",
+                headerName: "اسم المشترك",
+                flex: 1,
+                cellRenderer: (p: any) => <span className="font-bold">{p.value}</span>,
+              },
+              { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.3 },
+              {
+                field: "serialNumber", 
+                headerName: "رقم التسلسل",
+                flex: 1,
+              },
+              {
+                field: "phoneNumber",
+                headerName: "الجوال",
+                flex: 1,
+                cellRenderer: (p: any) => (
+                  <div className="flex items-center gap-2 font-bold">
+                    <Phone size={14} className="text-slate-400" />
+                    {p.value || "غير مسجل"}
+                  </div>
+                ),
+              },
+              {
+                field: "endDate",
+                headerName: "تاريخ الاستحقاق",
+                flex: 1,
+                valueFormatter: (p: any) => new Date(p.value).toLocaleDateString("ar-EG"),
+              },
               {
                 field: "days_remaining",
                 headerName: "الحالة",
                 flex: 1,
                 cellRenderer: (params: any) => {
                   const days = params.value;
-                  let borderColor = "";
                   let textColor = "";
 
                   if (days <= 2) {
-                    borderColor = "border-rose-500";
                     textColor = "text-rose-600 font-black animate-pulse";
                   } else if (days <= 5) {
-                    borderColor = "border-amber-500";
                     textColor = "text-amber-600 font-bold";
                   } else {
-                    borderColor = "border-emerald-500";
                     textColor = "text-emerald-600";
                   }
 
                   return (
                     <div className="flex justify-center items-center h-full">
-                      {/* هنا التعديل: نص مع خط سفلي ملون فقط */}
-                      <span
-                        className={cn(
-                          "px-2 pb-0.5  transition-all font-bold",
-                          borderColor,
-                          textColor,
-                        )}
-                      >
+                      <span className={cn("px-2 transition-all font-bold", textColor)}>
                         {days === 0 ? "ينتهي اليوم" : `باقي ${days} يوم`}
                       </span>
                     </div>
@@ -216,12 +180,7 @@ export default function AlertsPage() {
 function StatCard({ icon, label, value, bg }: any) {
   return (
     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 min-w-[170px]">
-      <div
-        className={cn(
-          "w-12 h-12 rounded-xl flex items-center justify-center",
-          bg,
-        )}
-      >
+      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", bg)}>
         {icon}
       </div>
       <div>

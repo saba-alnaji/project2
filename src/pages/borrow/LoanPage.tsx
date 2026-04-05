@@ -23,12 +23,7 @@ export default function LoanPage() {
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // دالة مساعدة لتنسيق الباركود (0000 + القيمة + 00001)
-  const formatBarcode = (val: string | number) => {
-    if (!val) return "";
-    return `0000${val}00001`;
-  };
-
+ 
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
   });
