@@ -5,9 +5,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import axios from "axios";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner"; // ✅ التعديل هنا لـ Sonner
+import { toast } from "sonner";
 
-// ================= Types =================
+// ================= Types & Schema =================
 
 interface Guarantor {
   guarantorId?: string | number | null;
@@ -26,20 +26,18 @@ interface Guarantor {
 }
 
 const guarantorSchema = z.object({
-  idnumber: z.string().length(9, "رقم الهوية يجب أن يكون 9 أرقام").regex(/^\d+$/, "أرقام فقط"),
-  firstName: z.string().min(1, "الاسم الأول مطلوب"),
-  fatherName: z.string().min(1, "اسم الأب مطلوب"),
-  grandfatherName: z.string().min(1, "اسم الجد مطلوب"),
-  familyName: z.string().min(1, "اسم العائلة مطلوب"),
-  job: z.string().min(1, "الوظيفة مطلوبة"),
-  street: z.string().optional().nullable(),
-  village: z.string().optional().nullable(),
-  neighborhood: z.string().optional().nullable(),
-  phoneNumbers: z
-    .array(
-      z.string().regex(/^\d{10,12}$/, "رقم الجوال يجب أن يكون بين 10-12 خانة")
-    )
-    .min(1, "يجب إضافة رقم جوال واحد على الأقل"),
+  idnumber: z.string().length(9, "رقم الهوية يجب أن يكون 9 أرقام").regex(/^\d+$/, "يجب إدخال أرقام فقط"),
+  firstName: z.string().min(1, "الاسم الأول مطلوب").regex(/^[\u0621-\u064A\s]+$/, "يجب إدخال حروف عربية فقط"),
+  fatherName: z.string().min(1, "اسم الأب مطلوب").regex(/^[\u0621-\u064A\s]+$/, "يجب إدخال حروف عربية فقط"),
+  grandfatherName: z.string().min(1, "اسم الجد مطلوب").regex(/^[\u0621-\u064A\s]+$/, "يجب إدخال حروف عربية فقط"),
+  familyName: z.string().min(1, "اسم العائلة مطلوب").regex(/^[\u0621-\u064A\s]+$/, "يجب إدخال حروف عربية فقط"),
+  job: z.string().min(1, "الوظيفة مطلوبة").regex(/^[\u0621-\u064A\s]+$/, "يجب إدخال الوظيفة باللغة العربية فقط"),
+  street: z.string().regex(/^[\u0621-\u064A0-9\s!@#$%^&*()_+={}\[\]:;"'<>,.?/-]*$/, "يجب استخدام اللغة العربية والرموز فقط").optional().nullable(),
+  village: z.string().regex(/^[\u0621-\u064A0-9\s!@#$%^&*()_+={}\[\]:;"'<>,.?/-]*$/, "يجب استخدام اللغة العربية والرموز فقط").optional().nullable(),
+  neighborhood: z.string().regex(/^[\u0621-\u064A0-9\s!@#$%^&*()_+={}\[\]:;"'<>,.?/-]*$/, "يجب استخدام اللغة العربية والرموز فقط").optional().nullable(),
+  phoneNumbers: z.array(
+    z.string().regex(/^[0-9+\-() ]+$/, "رقم الجوال يجب أن يحتوي على أرقام ورموز فقط").min(10, "الرقم قصير جداً")
+  ).min(1, "يجب إضافة رقم جوال واحد على الأقل"),
 });
 
 type GuarantorFormData = z.infer<typeof guarantorSchema>;
@@ -49,11 +47,12 @@ interface GuarantorStepProps {
   onBack: () => void;
   previousGuarantor?: any;
   previousFormValues?: any;
+
 }
 
 const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
   const { onNext, onBack, previousGuarantor, previousFormValues } = props;
-  
+
   const [nationalId, setNationalId] = useState(previousGuarantor?.idnumber || previousFormValues?.idnumber || "");
   const [searchLoading, setSearchLoading] = useState(false);
   const [foundGuarantor, setFoundGuarantor] = useState<Guarantor | null>(previousGuarantor || null);
@@ -69,41 +68,52 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
     },
   });
 
+  // --- دالات التصفية الحية (نفس الموجودة في كود المشترك) ---
+  const filterNumbers = (val: string) => val.replace(/[^\d]/g, "");
+  const filterArabic = (val: string) => val.replace(/[^\u0621-\u064A\s]/g, "");
+  const filterNoEnglish = (val: string) => val.replace(/[a-zA-Z]/g, "");
+  const filterPhone = (val: string) => val.replace(/[^0-9+\-() ]/g, "");
+
+  const handleLiveChange = (name: keyof GuarantorFormData, filterFn: (v: string) => string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const filteredValue = filterFn(e.target.value);
+    setValue(name, filteredValue, { shouldValidate: true });
+  };
+
   useEffect(() => {
-  if (previousGuarantor && !previousGuarantor.isNew) {
-    setFoundGuarantor(previousGuarantor);
-    setNationalId(previousGuarantor.idnumber || previousGuarantor.IDNumber || "");
-    setMode("found");
-    setSearched(true);
-  } else if (previousFormValues?.isNew) {
-    setMode("new-form");
-    setNotFound(true);
-    setSearched(true);
-    setNationalId(previousFormValues.idnumber || "");
-    reset(previousFormValues);
-  }
-}, [previousGuarantor, previousFormValues, reset]);
+    if (previousGuarantor && !previousGuarantor.isNew) {
+      setFoundGuarantor(previousGuarantor);
+      setNationalId(previousGuarantor.idnumber || previousGuarantor.IDNumber || "");
+      setMode("found");
+      setSearched(true);
+    } else if (previousFormValues?.isNew) {
+      setMode("new-form");
+      setNotFound(true);
+      setSearched(true);
+      setNationalId(previousFormValues.idnumber || "");
+      reset(previousFormValues);
+    }
+  }, [previousGuarantor, previousFormValues, reset]);
 
   useImperativeHandle(ref, () => ({
-  submitGuarantor: () => {
-    if (mode === "found" && foundGuarantor) {
-      onNext({ ...foundGuarantor, isNew: false });
-    } else if (mode === "new-form") {
-      handleSubmit((data) => {
-        onNext({ ...data, guarantorId: 0, isNew: true });
-      })();
-    } else {
-      toast.error("تنبيه: يرجى البحث أو تعبئة البيانات");
+    submitGuarantor: () => {
+      if (mode === "found" && foundGuarantor) {
+        onNext({ ...foundGuarantor, isNew: false });
+      } else if (mode === "new-form") {
+        handleSubmit((data) => {
+          onNext({ ...data, guarantorId: 0, isNew: true });
+        })();
+      } else {
+        toast.error("تنبيه: يرجى البحث أو تعبئة البيانات");
+      }
+    },
+    getCurrentValues: () => {
+      if (mode === "found") return { ...foundGuarantor, isNew: false };
+      if (mode === "new-form") return { ...getValues(), isNew: true };
+      return { idnumber: nationalId, isNew: false };
     }
-  },
-  getCurrentValues: () => {
-    if (mode === "found") return { ...foundGuarantor, isNew: false };
-    if (mode === "new-form") return { ...getValues(), isNew: true };
-    return { idnumber: nationalId, isNew: false };
-  }
-}));
+  }));
 
- const handleSearch = async () => {
+  const handleSearch = async () => {
     if (!nationalId.trim()) return;
     setSearchLoading(true);
     setFoundGuarantor(null);
@@ -112,7 +122,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("https://localhost:8080/api/Subscription/search-guarantor", {
+      const response = await axios.get("/api/Subscription/search-guarantor", {
         params: { IDNumber: nationalId.trim() },
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -136,28 +146,21 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         };
         setFoundGuarantor(mapped);
         setMode("found");
-        
-        // ✅ استخدام Sonner للنجاح
         toast.success("تم العثور على الكفيل بنجاح");
-
       } else {
         setNotFound(true);
       }
-    } catch (error: any) { 
+    } catch (error: any) {
       setSearched(true);
-      
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
         toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
-        window.location.href = "/login"; 
+        window.location.href = "/login";
         return;
       }
-
       setNotFound(true);
-      // ✅ جلب رسالة الخطأ من الباك إند
       const serverMsg = error.response?.data?.message || error.response?.data || "خطأ في البحث عن الكفيل";
       toast.error(serverMsg);
-
     } finally {
       setSearchLoading(false);
     }
@@ -180,16 +183,11 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
   };
 
   const mobile_numbers = watch("phoneNumbers") ?? [""];
-  const updateMobile = (index: number, val: string) => {
-    const arr = [...mobile_numbers];
-    arr[index] = val;
-    setValue("phoneNumbers", arr, { shouldValidate: true });
-  };
 
   const inputClassCustom = (name: keyof GuarantorFormData, isReadOnly: boolean) => cn(
     "w-full px-4 py-3 rounded-xl border-2 text-base transition-all focus:outline-none",
-    isReadOnly 
-      ? "bg-green-50 border-green-200 text-green-900 cursor-default" 
+    isReadOnly
+      ? "bg-green-50 border-green-200 text-green-900 cursor-default"
       : (errors[name] ? "border-destructive bg-card" : "border-border focus:border-primary bg-card")
   );
 
@@ -210,11 +208,12 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
         <div className="flex gap-2">
           <input
             value={nationalId}
-            onChange={(e) => setNationalId(e.target.value)}
+            onChange={(e) => setNationalId(filterNumbers(e.target.value))}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="أدخل رقم هوية الكفيل..."
             className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-100 focus:border-primary focus:outline-none bg-slate-50"
             dir="ltr"
+            maxLength={9}
           />
           <button
             type="button"
@@ -263,10 +262,12 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
                 رقم الهوية {mode === "new-form" && <span className="text-destructive">*</span>}
               </label>
               <input 
-                {...(mode === "new-form" ? register("idnumber") : {})} 
+                {...(mode === "new-form" ? { ...register("idnumber"), onChange: handleLiveChange("idnumber", filterNumbers) } : {})} 
                 value={mode === "found" ? foundGuarantor?.idnumber : undefined}
                 className={inputClassCustom("idnumber", mode === "found")} 
-                readOnly 
+                readOnly={mode === "found"}
+                maxLength={9}
+                dir="ltr"
               />
               {errors.idnumber && mode === "new-form" && <p className="text-[10px] text-destructive mt-1 mr-2">{errors.idnumber.message}</p>}
             </div>
@@ -275,11 +276,11 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
                 الوظيفة {mode === "new-form" && <span className="text-destructive">*</span>}
               </label>
               <input 
-                {...(mode === "new-form" ? register("job") : {})} 
+                {...(mode === "new-form" ? { ...register("job"), onChange: handleLiveChange("job", filterArabic) } : {})} 
                 value={mode === "found" ? foundGuarantor?.job : undefined}
                 className={inputClassCustom("job", mode === "found")} 
                 readOnly={mode === "found"}
-                placeholder="الوظيفة"
+                placeholder="الوظيفة بالعربي"
               />
               {errors.job && mode === "new-form" && <p className="text-[10px] text-destructive mt-1 mr-2">{errors.job.message}</p>}
             </div>
@@ -291,30 +292,30 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
             </label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="flex flex-col">
-                <input {...(mode === "new-form" ? register("firstName") : {})} value={mode === "found" ? foundGuarantor?.firstName : undefined} className={inputClassCustom("firstName", mode === "found")} readOnly={mode === "found"} placeholder="الأول" />
+                <input {...(mode === "new-form" ? { ...register("firstName"), onChange: handleLiveChange("firstName", filterArabic) } : {})} value={mode === "found" ? foundGuarantor?.firstName : undefined} className={inputClassCustom("firstName", mode === "found")} readOnly={mode === "found"} placeholder="الأول" />
                 {errors.firstName && mode === "new-form" && <span className="text-[9px] text-destructive mr-1">{errors.firstName.message}</span>}
               </div>
               <div className="flex flex-col">
-                <input {...(mode === "new-form" ? register("fatherName") : {})} value={mode === "found" ? foundGuarantor?.fatherName : undefined} className={inputClassCustom("fatherName", mode === "found")} readOnly={mode === "found"} placeholder="الأب" />
+                <input {...(mode === "new-form" ? { ...register("fatherName"), onChange: handleLiveChange("fatherName", filterArabic) } : {})} value={mode === "found" ? foundGuarantor?.fatherName : undefined} className={inputClassCustom("fatherName", mode === "found")} readOnly={mode === "found"} placeholder="الأب" />
                 {errors.fatherName && mode === "new-form" && <span className="text-[9px] text-destructive mr-1">{errors.fatherName.message}</span>}
               </div>
               <div className="flex flex-col">
-                <input {...(mode === "new-form" ? register("grandfatherName") : {})} value={mode === "found" ? foundGuarantor?.grandfatherName : undefined} className={inputClassCustom("grandfatherName", mode === "found")} readOnly={mode === "found"} placeholder="الجد" />
+                <input {...(mode === "new-form" ? { ...register("grandfatherName"), onChange: handleLiveChange("grandfatherName", filterArabic) } : {})} value={mode === "found" ? foundGuarantor?.grandfatherName : undefined} className={inputClassCustom("grandfatherName", mode === "found")} readOnly={mode === "found"} placeholder="الجد" />
                 {errors.grandfatherName && mode === "new-form" && <span className="text-[9px] text-destructive mr-1">{errors.grandfatherName.message}</span>}
               </div>
               <div className="flex flex-col">
-                <input {...(mode === "new-form" ? register("familyName") : {})} value={mode === "found" ? foundGuarantor?.familyName : undefined} className={inputClassCustom("familyName", mode === "found")} readOnly={mode === "found"} placeholder="العائلة" />
+                <input {...(mode === "new-form" ? { ...register("familyName"), onChange: handleLiveChange("familyName", filterArabic) } : {})} value={mode === "found" ? foundGuarantor?.familyName : undefined} className={inputClassCustom("familyName", mode === "found")} readOnly={mode === "found"} placeholder="العائلة" />
                 {errors.familyName && mode === "new-form" && <span className="text-[9px] text-destructive mr-1">{errors.familyName.message}</span>}
               </div>
             </div>
           </div>
 
           <div>
-            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>العنوان</label>
+            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>العنوان </label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input {...(mode === "new-form" ? register("street") : {})} value={mode === "found" ? foundGuarantor?.street || "" : undefined} className={inputClassCustom("street", mode === "found")} readOnly={mode === "found"} placeholder="الشارع" />
-              <input {...(mode === "new-form" ? register("village") : {})} value={mode === "found" ? foundGuarantor?.village || "" : undefined} className={inputClassCustom("village", mode === "found")} readOnly={mode === "found"} placeholder="القرية" />
-              <input {...(mode === "new-form" ? register("neighborhood") : {})} value={mode === "found" ? foundGuarantor?.neighborhood || "" : undefined} className={inputClassCustom("neighborhood", mode === "found")} readOnly={mode === "found"} placeholder="الحي" />
+              <input {...(mode === "new-form" ? { ...register("street"), onChange: handleLiveChange("street", filterNoEnglish) } : {})} value={mode === "found" ? foundGuarantor?.street || "" : undefined} className={inputClassCustom("street", mode === "found")} readOnly={mode === "found"} placeholder="الشارع" />
+              <input {...(mode === "new-form" ? { ...register("village"), onChange: handleLiveChange("village", filterNoEnglish) } : {})} value={mode === "found" ? foundGuarantor?.village || "" : undefined} className={inputClassCustom("village", mode === "found")} readOnly={mode === "found"} placeholder="القرية" />
+              <input {...(mode === "new-form" ? { ...register("neighborhood"), onChange: handleLiveChange("neighborhood", filterNoEnglish) } : {})} value={mode === "found" ? foundGuarantor?.neighborhood || "" : undefined} className={inputClassCustom("neighborhood", mode === "found")} readOnly={mode === "found"} placeholder="الحي" />
             </div>
           </div>
 
@@ -328,7 +329,14 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
                   <div className="flex gap-2">
                     <input
                       value={mode === "found" ? num : mobile_numbers[index]}
-                      onChange={(e) => mode === "new-form" && updateMobile(index, e.target.value)}
+                      onChange={(e) => {
+                        if (mode === "new-form") {
+                           const filtered = filterPhone(e.target.value);
+                           const arr = [...mobile_numbers];
+                           arr[index] = filtered;
+                           setValue("phoneNumbers", arr, { shouldValidate: true });
+                        }
+                      }}
                       className={inputClassCustom("phoneNumbers", mode === "found")}
                       readOnly={mode === "found"}
                       dir="ltr"
@@ -362,7 +370,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
               onClick={() => { setMode("search"); setSearched(false); setNotFound(false); }} 
               className="text-primary text-sm font-bold flex items-center gap-1 hover:underline"
             >
-              <RotateCcw className="w-4 h-4" /> العودة لشاشة البحث
+              <RotateCcw className="w-4 h-4" /> بحث جديد
             </button>
           </div>
         </div>
@@ -371,5 +379,4 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
   );
 });
 
-GuarantorStep.displayName = "GuarantorStep";
 export default GuarantorStep;

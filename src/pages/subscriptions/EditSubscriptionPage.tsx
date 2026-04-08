@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import {
-  Search, Save, Loader2, UserCheck, ShieldCheck, PencilLine, X, Plus, UserPlus, Info
+  Search, Save, Loader2, UserCheck, ShieldCheck, PencilLine, X, Plus, UserPlus, Info, FileText, ArrowRight,
+  ArrowLeft
 } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
@@ -8,11 +9,11 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import SubscriberStep from "@/components/library/SubscriberStep";
 import GuarantorStep from "@/components/library/GuarantorStep";
+import SubscriptionStep from "@/components/library/SubscriptionStep";
 
 export default function EditSubscriptionPage() {
   const guarantorRef = useRef<any>(null);
 
-  // 1. حالات التحكم والبحث
   const [currentStep, setCurrentStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"idNumber" | "memberNumber">("idNumber");
@@ -20,11 +21,11 @@ export default function EditSubscriptionPage() {
   const [saving, setSaving] = useState(false);
   const [showNewGuarantorSearch, setShowNewGuarantorSearch] = useState(false);
 
-  // 2. حالات البيانات الأساسية
   const [userID, setUserID] = useState<number | null>(null);
   const [memberData, setMemberData] = useState<any>(null);
+  const [guarantorData, setGuarantorData] = useState<any>(null);
+  const [subscriptionData, setSubscriptionData] = useState<any>(null);
 
-  // 3. إعداد فورم الكفيل (للتعديل المباشر)
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     defaultValues: {
       idnumber: "",
@@ -46,29 +47,38 @@ export default function EditSubscriptionPage() {
     if (!searchQuery.trim()) return;
     setSearching(true);
     setMemberData(null);
+    setGuarantorData(null);
+    setSubscriptionData(null);
     setShowNewGuarantorSearch(false);
     setCurrentStep(1);
 
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post("https://localhost:8080/api/Subscription/search",
+      const res = await axios.post("/api/Subscription/search",
         { [searchType]: searchQuery.trim(), pageNumber: 1, pageSize: 1 },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.data && res.data.memberInfo) {
-        const { memberInfo, guarantorInfo, userID: id } = res.data;
+        const { memberInfo, guarantorInfo, subscriptionInfo, userID: id } = res.data;
         setUserID(id);
-        setMemberData({
+        
+        const initialMember = {
           ...memberInfo,
           cityId: (memberInfo.cityId || memberInfo.cityID)?.toString() || "",
           phoneNumbers: memberInfo.phoneNumbers || [""]
-        });
-        reset({
+        };
+        setMemberData(initialMember);
+
+        const initialGuarantor = {
           ...guarantorInfo,
           idnumber: guarantorInfo.idNumber || guarantorInfo.IDNumber || guarantorInfo.idnumber || "",
           phoneNumbers: guarantorInfo.phoneNumbers && guarantorInfo.phoneNumbers.length > 0 ? guarantorInfo.phoneNumbers : [""]
-        });
+        };
+        setGuarantorData(initialGuarantor);
+        setSubscriptionData(subscriptionInfo);
+
+        reset(initialGuarantor);
         toast.success("تم جلب بيانات الاشتراك بنجاح");
       } else {
         toast.error("لا يوجد نتائج لهذا البحث");
@@ -80,19 +90,26 @@ export default function EditSubscriptionPage() {
         return;
       }
       const serverMessage = error.response?.data?.message || error.response?.data || "حدث خطأ في الاتصال بالسيرفر";
-
       toast.error("عذراً، لم يكتمل الطلب", { description: serverMessage });
-
     } finally {
       setSearching(false);
     }
   };
 
+  const handleBackToSubscriber = () => {
+    if (showNewGuarantorSearch && guarantorRef.current) {
+      const currentValues = guarantorRef.current.getCurrentValues();
+      setGuarantorData(currentValues);
+    } else {
+      setGuarantorData(watch());
+    }
+    setCurrentStep(1);
+  };
 
   const onFinishUpdate = async (finalGuarantor: any) => {
-    const isValidPhones = finalGuarantor.phoneNumbers.every((p: string) => /^\d{10,12}$/.test(p)) && finalGuarantor.phoneNumbers.length > 0;
+    const isValidPhones = finalGuarantor.phoneNumbers.every((p: string) => p && /^\d{7,15}$/.test(p)) && finalGuarantor.phoneNumbers.length > 0;
     if (!isValidPhones) {
-      toast.error("يرجى التأكد من صحة أرقام الجوال (10-12 رقم)"); return;
+      toast.error("يرجى التأكد من صحة أرقام الجوال"); return;
     }
     setSaving(true);
     try {
@@ -106,16 +123,18 @@ export default function EditSubscriptionPage() {
         memberInfo: memberData,
         guarantorInfo: formattedGuarantor
       };
-      await axios.put("https://localhost:8080/api/Subscription/update", payload, {
+      await axios.put("/api/Subscription/update", payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      toast.success("تم حفظ كافة التعديلات بنجاح"); setMemberData(null);
+      toast.success("تم حفظ كافة التعديلات بنجاح"); 
+      setMemberData(null);
+      setGuarantorData(null);
+      setSubscriptionData(null);
       setUserID(null);
       setSearchQuery("");
       setCurrentStep(1);
       setShowNewGuarantorSearch(false);
       reset();
-
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
         localStorage.removeItem("token");
@@ -144,25 +163,19 @@ export default function EditSubscriptionPage() {
     <div className="max-w-5xl mx-auto p-4 pb-20" dir="rtl">
       <div className="mb-8 ">
         <div className="flex  gap-3 mb-2">
-          {/* إضافة الأيقونة هنا */}
           <PencilLine className="w-10 h-10 text-primary" />
-
           <h1 className="text-3xl font-black text-slate-900">إدارة وتعديل الاشتراك</h1>
         </div>
         <p className="text-slate-500 mr-12">ابحث برقم الهوية أو رقم المشترك لتعديل البيانات</p>
       </div>
-      {/* بار البحث العلوي */}
+
       <div className="bg-white rounded-2xl p-4 border border-slate-200 mb-8 shadow-sm flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleInitialSearch();
-              }
-            }}
+            onKeyDown={(e) => e.key === "Enter" && handleInitialSearch()}
             placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
             className="w-full pr-4 pl-4 py-3 rounded-xl border-2 border-slate-100 focus:border-primary outline-none transition-all"
           />
@@ -187,18 +200,23 @@ export default function EditSubscriptionPage() {
 
       {memberData && (
         <div className="space-y-6">
-          {/* Stepper */}
-          <div className="flex items-center justify-center gap-6 mb-10">
-            <div className={cn("flex items-center gap-3 px-6 py-3 rounded-2xl font-bold transition-all shadow-sm cursor-pointer",
+          <div className="flex items-center justify-center gap-4 mb-10 overflow-x-auto py-2">
+            <div className={cn("flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap",
               currentStep === 1 ? "bg-primary text-white scale-105 shadow-lg" : "bg-white text-slate-400 border border-slate-100")}
               onClick={() => setCurrentStep(1)}>
-              <UserCheck className="w-5 h-5" /> بيانات المشترك
+              <UserCheck className="w-5 h-5" /> <span className="text-sm">بيانات المشترك</span>
             </div>
-            <div className="h-px w-16 bg-slate-200 hidden md:block" />
-            <div className={cn("flex items-center gap-3 px-6 py-3 rounded-2xl font-bold transition-all shadow-sm cursor-pointer",
+            <div className="h-px w-8 bg-slate-200" />
+            <div className={cn("flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap",
               currentStep === 2 ? "bg-primary text-white scale-105 shadow-lg" : "bg-white text-slate-400 border border-slate-100")}
               onClick={() => setCurrentStep(2)}>
-              <ShieldCheck className="w-5 h-5" /> بيانات الكفيل
+              <ShieldCheck className="w-5 h-5" /> <span className="text-sm">بيانات الكفيل</span>
+            </div>
+            <div className="h-px w-8 bg-slate-200" />
+            <div className={cn("flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap",
+              currentStep === 3 ? "bg-primary text-white scale-105 shadow-lg" : "bg-white text-slate-400 border border-slate-100")}
+              onClick={() => setCurrentStep(3)}>
+              <FileText className="w-5 h-5" /> <span className="text-sm">تفاصيل الاشتراك</span>
             </div>
           </div>
 
@@ -213,7 +231,6 @@ export default function EditSubscriptionPage() {
 
           {currentStep === 2 && (
             <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-card animate-in fade-in slide-in-from-left-4">
-
               {!showNewGuarantorSearch ? (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between border-b pb-4 mb-4">
@@ -253,7 +270,6 @@ export default function EditSubscriptionPage() {
                       </div>
                     </div>
 
-                    {/* قسم العنوان الذي تم إرجاعه */}
                     <div>
                       <label className="block text-sm font-semibold mb-2 text-slate-700">العنوان</label>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -286,8 +302,8 @@ export default function EditSubscriptionPage() {
                                 </button>
                               )}
                             </div>
-                            {mobile_numbers[index] && !/^\d{10,12}$/.test(mobile_numbers[index]) && (
-                              <p className="text-[10px] text-destructive">يجب أن يكون بين 10-12 خانة</p>
+                            {mobile_numbers[index] && !/^\d{7,15}$/.test(mobile_numbers[index]) && (
+                              <p className="text-[10px] text-destructive">تنسيق رقم غير صحيح</p>
                             )}
                           </div>
                         ))}
@@ -308,34 +324,82 @@ export default function EditSubscriptionPage() {
                   >
                     <UserPlus className="w-5 h-5" /> هل تريد تغيير الكفيل بالكامل؟ ابحث عن كفيل آخر
                   </button>
+
+                  
                 </div>
               ) : (
                 <div className="animate-in zoom-in-95">
                   <div className="flex items-center justify-between mb-6">
-                    <button onClick={() => setShowNewGuarantorSearch(false)} className="text-slate-400 hover:text-red-500 font-bold">إلغاء البحث</button>
+                    <button onClick={() => setShowNewGuarantorSearch(false)} className="text-slate-400 hover:text-red-500 font-bold">إلغاء البحث والعودة للكفيل الحالي</button>
                   </div>
                   <GuarantorStep
                     ref={guarantorRef}
-                    onNext={onFinishUpdate}
+                    onNext={(data) => {
+                       setGuarantorData(data);
+                       setCurrentStep(3);
+                    }}
                     onBack={() => setShowNewGuarantorSearch(false)}
+                    previousGuarantor={guarantorData?.isNew === false ? guarantorData : null}
+                    previousFormValues={guarantorData?.isNew === true ? guarantorData : null}
                   />
                 </div>
               )}
+              
+              <div className="mt-10 pt-8 border-t flex justify-between">
+                 <button onClick={handleBackToSubscriber} className="w-full md:w-auto px-12 py-3.5 rounded-2xl gradient-primary text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                     السابق
+                 </button>
+                  <button 
+                      onClick={() => {
+                        // تعديل مهم: تحديث البيانات في الـ State بناءً على الوضع الحالي
+                        if (showNewGuarantorSearch) {
+                          const newData = guarantorRef.current?.getCurrentValues();
+                          if (newData) setGuarantorData(newData);
+                        } else {
+                          setGuarantorData(watch());
+                        }
+                        setCurrentStep(3);
+                      }} 
+                      className="w-full md:w-auto px-12 py-3.5 rounded-2xl gradient-primary text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                      التالي: معاينة الاشتراك 
+                    </button>
+              </div>
+            </div>
+          )}
 
-              {/* أزرار التحكم السفلية */}
+          {currentStep === 3 && (
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-card animate-in fade-in slide-in-from-left-4 text-right">
+              <div className="flex items-center gap-2 mb-6 text-slate-800 font-bold text-xl border-b pb-4">
+                <FileText className="text-primary w-6 h-6" /> معاينة نهائية للاشتراك
+              </div>
+              
+              <SubscriptionStep
+                initialData={subscriptionData}
+                isReadOnly={true} 
+                onSubmit={async () => {}} // Dummy for ReadOnly
+                onBack={() => setCurrentStep(2)}
+                loading={false}
+                resetForm={() => {}} 
+              />
+
               <div className="mt-10 pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4">
-                <button onClick={() => setCurrentStep(1)} className="px-12 py-3 rounded-xl gradient-primary text-white font-bold shadow-card hover:shadow-elevated transition-all flex items-center justify-center min-w-[140px]">
-                  العودة لبيانات المشترك
+                <button 
+                  onClick={() => setCurrentStep(2)} 
+                  className="w-full md:w-auto px-12 py-3.5 rounded-2xl gradient-primary text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                >
+                  السابق
                 </button>
 
                 <button
-                  onClick={handleSubmit((data) => {
-                    if (showNewGuarantorSearch) {
-                      guarantorRef.current?.submitGuarantor();
-                    } else {
-                      onFinishUpdate(data);
+                  onClick={() => {
+                    // تعديل مهم: نستخدم دائماً البيانات المخزنة في الـ State (guarantorData)
+                    if (guarantorData) {
+                      onFinishUpdate(guarantorData);
+                    } else if (!showNewGuarantorSearch) {
+                      handleSubmit(onFinishUpdate)();
                     }
-                  })}
+                  }}
                   disabled={saving}
                   className="w-full md:w-auto px-16 py-4 rounded-2xl gradient-primary text-white font-black text-xl flex items-center justify-center gap-3 shadow-xl hover:scale-[1.01] transition-all disabled:opacity-50"
                 >

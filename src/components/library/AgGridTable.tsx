@@ -249,7 +249,7 @@ export default function AgGridTable({
         </div>
       )}
 
-      <div className="rounded-xl overflow-hidden border border-border flex-1 min-h-[500px] bg-white">
+      <div className="rounded-xl overflow-hidden border border-border flex-1 bg-white">
         <AgGridReact
           ref={gridRef}
           rowData={rowData}

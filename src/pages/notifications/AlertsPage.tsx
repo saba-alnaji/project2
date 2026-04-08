@@ -25,9 +25,8 @@ export default function AlertsPage() {
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      // الطريقة التي تفضلينها: جلب التوكن يدوياً وتمريره في الهيدرز
       const token = localStorage.getItem("token");
-      const response = await axios.get(`https://localhost:8080/api/Borrow/list`, {
+      const response = await axios.get(`/api/Borrow/list`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -39,8 +38,8 @@ export default function AlertsPage() {
           const expectedDate = new Date(loan.endDate);
           const diffTime = expectedDate.getTime() - today.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          // عرض التنبيهات للكتب التي بقي على موعدها 13 يوماً أو أقل ولم تنتهِ بعد
-          return diffDays <= 13 && diffDays >= 0;
+          // التعديل هنا: الفلترة لتظهر فقط من بقي له 5 أيام أو أقل
+          return diffDays <= 5 && diffDays >= 0;
         })
         .map((loan: any) => ({
           ...loan,
@@ -52,7 +51,6 @@ export default function AlertsPage() {
 
       setAlerts(filtered);
     } catch (err: any) {
-      // معالجة الـ 401 يدوياً داخل الـ catch
       if (err.response && err.response.status === 401) {
         localStorage.removeItem("token");
         toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
@@ -109,7 +107,7 @@ export default function AlertsPage() {
         </div>
 
         {/* الجدول */}
-        <div className={cn(glassCardClass, "bg-card p-4 h-[800px] flex flex-col border-none shadow-xl")}>
+        <div className={cn(glassCardClass, "bg-card p-4 h-[500px] flex flex-col border-none shadow-xl")}>
           <AgGridTable
             columnDefs={[
               { field: "memberNumber", headerName: "رقم المشترك", flex: 0.8 },
@@ -150,12 +148,13 @@ export default function AlertsPage() {
                   const days = params.value;
                   let textColor = "";
 
+                  // التعديل هنا بناءً على طلبك للألوان
                   if (days <= 2) {
+                    // يومين أو يوم أو صفر: أحمر
                     textColor = "text-rose-600 font-black animate-pulse";
-                  } else if (days <= 5) {
-                    textColor = "text-amber-600 font-bold";
                   } else {
-                    textColor = "text-emerald-600";
+                    // 3 أيام أو أكثر (حتى 5): أخضر
+                    textColor = "text-emerald-600 font-bold";
                   }
 
                   return (
@@ -179,7 +178,7 @@ export default function AlertsPage() {
 
 function StatCard({ icon, label, value, bg }: any) {
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 min-w-[170px]">
+    <div className="bg-card p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 min-w-[170px]">
       <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", bg)}>
         {icon}
       </div>

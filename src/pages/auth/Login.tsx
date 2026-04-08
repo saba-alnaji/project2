@@ -20,7 +20,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch("https://localhost:8080/api/Auth/login", {
+      const response = await fetch("/api/Auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -72,7 +72,7 @@ export default function NewSubscriptionForm() {
     setCurrentStep(2);
   };
 
-  const handleFinalSubmit = async (finalSubData: SubscriptionFormData) => {
+ const handleFinalSubmit = async (finalSubData: SubscriptionFormData) => {
     if (!subscriberData || !guarantorData) return;
     setLoading(true);
     try {
@@ -103,12 +103,21 @@ export default function NewSubscriptionForm() {
           amount: Number(finalSubData.amount)
         }
       };
-      await axios.post("https://localhost:8080/api/Subscription/create", apiPayload, {
+
+      // 1. تخزين استجابة السيرفر في متغير
+      const response = await axios.post("/api/Subscription/create", apiPayload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       toast.success("تم تسجيل الاشتراك بنجاح");
-      resetForm();
+      
+      // 2. إرجاع البيانات لكي يراها مكون SubscriptionStep ويعرض الـ Alert
+      const userData = response.data; // تأكدي أن السيرفر يرسل {userName, password} هنا
+
+      // 3. تأخير تصفير الفورم قليلاً لضمان ظهور التنبيه (اختياري)
+      // resetForm(); // إذا صفرنا الفورم فوراً قد يختفي المكون قبل عرض التنبيه
+      
+      return userData; // هذا هو السطر الأهم
 
     } catch (error: any) {
       if (error.response && error.response.status === 401) {
@@ -121,6 +130,7 @@ export default function NewSubscriptionForm() {
       toast.error("خطأ في الحفظ", {
         description: error.response?.data?.message || "تعذر الاتصال بالسيرفر."
       });
+      throw error; 
     } finally {
       setLoading(false);
     }
@@ -170,13 +180,14 @@ export default function NewSubscriptionForm() {
         )}
 
         {currentStep === 3 && (
-          <SubscriptionStep
-            onSubmit={handleFinalSubmit}
-            onBack={handleSubscriptionBack}
-            loading={loading}
-            initialData={subscriptionData}
-          />
-        )}
+  <SubscriptionStep
+    onSubmit={handleFinalSubmit}
+    onBack={handleSubscriptionBack}
+    loading={loading}
+    initialData={subscriptionData}
+    resetForm={resetForm} // <--- أضيفي هذا السطر
+  />
+)}
       </div>
     </div>
   );

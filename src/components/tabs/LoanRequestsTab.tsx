@@ -4,20 +4,20 @@ import { toast } from "sonner";
 import AgGridTable from "@/components/library/AgGridTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, XCircle, Clock, Info, RefreshCcw, Trash2, FileSpreadsheet, Printer } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Trash2, MapPin, Hash, Maximize } from "lucide-react";
 
 export default function LoanRequestsTab() {
   const [loanRequests, setLoanRequests] = useState<any[]>([]);
   const [confirmModal, setConfirmModal] = useState<{ type: "approve" | "reject"; item: any } | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-
+  const [isCleaning, setIsCleaning] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`https://localhost:8080/api/Borrow/requests`, {
+      const res = await axios.get(`/api/Borrow/requests`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setLoanRequests(res.data || []);
@@ -30,24 +30,45 @@ export default function LoanRequestsTab() {
 
   useEffect(() => { loadData(); }, []);
 
+  const handleAutoReject = async () => {
+    setIsCleaning(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post(`/api/Borrow/auto-reject`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success(res.data.message || "تم تنظيف الطلبات المنتهية");
+      loadData();
+    } catch (error: any) {
+      toast.error("فشل في عملية تنظيف الطلبات");
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   const handleAction = async () => {
     if (!confirmModal) return;
     setActionLoading(true);
     const { type, item } = confirmModal;
-    const requestId = item.id || item.borrowID || item.requestID;
+    
+    const requestId = item.requestID; 
     const token = localStorage.getItem("token");
 
     try {
       if (type === "approve") {
-        await axios.post(`https://localhost:8080/api/Borrow/accept-online/${requestId}`, {}, {
+        await axios.post(`/api/Borrow/accept-online/${requestId}`, {}, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        toast.success("تم قبول الإعارة وتجهيز الكتاب");
       } else {
-        await axios.post(`https://localhost:8080/api/Borrow/reject-online`, { borrowID: requestId }, {
+        await axios.post(`/api/Borrow/reject-online`, { 
+          RequestID: requestId,
+          RejectionReason: "تم الرفض يدوياً من قبل الموظف" 
+        }, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        toast.success("تم رفض الطلب وإعادة الكتاب للمكتبة");
       }
-      toast.success("تم تنفيذ الإجراء بنجاح");
       setConfirmModal(null);
       loadData();
     } catch (error: any) {
@@ -80,70 +101,88 @@ export default function LoanRequestsTab() {
   return (
     <div className="space-y-4 animate-in fade-in duration-500">
       
-      {/* Container الرئيسي للجدول مع التصميم الجديد */}
       <div className=" border border-slate-200 rounded-[32px] shadow-sm overflow-hidden flex flex-col">
         
-        {/* Header الداخلي للجدول (مثل الصورة) */}
-        <div className="p-4  border-slate-100 flex justify-end items-center ">
+        <div className="p-4 border-slate-100 flex justify-end items-center ">
           <div className="flex gap-2">
-            <Button onClick={loadData} variant="outline" size="sm" className="rounded-xl h-10 border-slate-200 font-bold px-4">
-              <RefreshCcw className={`w-4 h-4 ml-2 ${loading ? 'animate-spin' : ''}`} /> تحديث
-            </Button>
-            <Button variant="outline" size="sm" className="rounded-xl h-10 border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-bold px-4">
-              <Trash2 className="w-4 h-4 ml-2" /> تنظيف المنتهي
+            <Button 
+              onClick={handleAutoReject}
+              disabled={isCleaning}
+              variant="outline" 
+              size="sm" 
+              className="rounded-xl h-10 border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-800 font-bold px-4"
+            >
+              <Trash2 className={`w-4 h-4 ml-2 ${isCleaning ? 'animate-bounce' : ''}`} /> 
+              {isCleaning ? "جاري التنظيف..." : "تنظيف المنتهي"}
             </Button>
           </div>
-
-
         </div>
 
-        {/* جسم الجدول */}
-        <div className="bg-card p-6 h-[800px] flex flex-col">
-            
+        <div className="bg-card p-6 h-[700px] flex flex-col">
           <AgGridTable
-          
             columnDefs={[
-              { field: "memberNumber", headerName: "رقم المشترك", width: 140, cellClass: "font-mono" },
-              { field: "fullName", headerName: "اسم المشترك", flex: 1.2 },
-              { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.5, cellClass: "font-bold text-slate-700" },
-              { field: "requestDate", headerName: "تاريخ الطلب", width: 140 },
+              { field: "fullName", headerName: "اسم المستعير", flex: 1, cellClass: "font-bold text-slate-800" },
+              { field: "bookTitle", headerName: "الكتاب المطلوب", flex: 1.3, cellClass: "text-primary font-medium" },
               { 
-                headerName: "مهلة الاستلام", 
+                field: "calassCode", 
+                headerName: "رمز التصنيف", 
+                width: 130,
+                cellRenderer: (p:any) => <div className="flex items-center ">{p.value}</div>
+              },
+              { 
+                field: "dimensions", 
+                headerName: "الأبعاد", 
+                width: 120,
+                cellRenderer: (p:any) => <div className="flex items-center ">{p.value}</div>
+              },
+              { 
+                field: "address", 
+                headerName: "العنوان", 
+                flex: 1,
+                cellRenderer: (p:any) => <div className="flex items-center ">{p.value}</div>
+              },
+              { 
+                headerName: "الحالة الزمنية", 
                 width: 160, 
                 cellRenderer: () => (
                   <div className="flex items-center gap-1 text-amber-600 font-bold text-[11px]">
-                    <Clock className="w-3 h-3" /> باقي 48 ساعة
+                    <Clock className="w-3 h-3" />  أقل من 48 ساعة
                   </div>
                 ) 
               },
-              { headerName: "الإجراءات", cellRenderer: loanActionRenderer, width: 180, filter: false },
+              { headerName: "الإجراءات", cellRenderer: loanActionRenderer, width: 170, filter: false },
             ]}
             rowData={loanRequests}
-            // شلنا الـ title من هون عشان صار عندنا Header مخصص فوق
           />
         </div>
       </div>
 
-      {/* مودال التأكيد (بدون تغيير في المنطق) */}
       <Dialog open={!!confirmModal} onOpenChange={() => setConfirmModal(null)}>
         <DialogContent className="rounded-[24px] sm:max-w-[450px]" dir="rtl">
           <DialogHeader>
             <DialogTitle className={`text-xl font-black flex items-center gap-2 ${confirmModal?.type === "approve" ? "text-emerald-600" : "text-rose-600"}`}>
               {confirmModal?.type === "approve" ? <CheckCircle className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
-              {confirmModal?.type === "approve" ? "تأكيد عملية الإعارة" : "رفض الطلب"}
+              {confirmModal?.type === "approve" ? "تأكيد الإعارة الأونلاين" : "رفض طلب الإعارة"}
             </DialogTitle>
           </DialogHeader>
           <div className="py-6 space-y-4">
             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-               <p className="text-xs text-slate-400 mb-1">تفاصيل الطلب:</p>
+               <p className="text-xs text-slate-400 mb-4">تفاصيل الكتاب والمستعير:</p>
                <p className="font-black text-slate-800 text-lg leading-tight">{confirmModal?.item?.bookTitle}</p>
-               <p className="text-sm text-slate-500 mt-2 flex items-center gap-1 underline decoration-slate-200 uppercase"> {confirmModal?.item?.fullName}</p>
+               <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3">
+                 <p className="text-sm text-slate-500 flex items-center gap-1 "> {confirmModal?.item?.fullName}</p>
+               </div>
             </div>
+            {confirmModal?.type === "approve" && (
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-800 text-[11px] leading-relaxed">
+                ملاحظة: عند القبول، سيتم حجز الكتاب رسمياً للمشترك وتغيير حالته إلى "مستعار".
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 p-4 pt-0">
-            <Button variant="ghost" onClick={() => setConfirmModal(null)} className="rounded-xl font-bold">إلغاء</Button>
+            <Button variant="ghost" onClick={() => setConfirmModal(null)} className="rounded-xl font-bold">إغلاق</Button>
             <Button disabled={actionLoading} onClick={handleAction} className={`rounded-xl font-bold px-10 h-12 shadow-lg transition-all ${confirmModal?.type === "approve" ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-rose-600 hover:bg-rose-700 shadow-rose-100"}`}>
-              {actionLoading ? "جاري..." : "تأكيد نهائي"}
+              {actionLoading ? "جاري المعالجة..." : "تأكيد نهائي"}
             </Button>
           </DialogFooter>
         </DialogContent>

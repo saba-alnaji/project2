@@ -89,7 +89,7 @@ export default function LoanPage() {
     if (!mNumber || mNumber.length < 3) return;
     try {
       const response = await axios.post(
-        "https://localhost:8080/api/Borrow/Borrow-history",
+        "/api/Borrow/Borrow-history",
         { memberNumber: mNumber, pageNumber: 1, pageSize: 50 },
         { headers: getAuthHeaders() }
       );
@@ -130,7 +130,7 @@ export default function LoanPage() {
         barcode: bookBarcode,
       };
 
-      await axios.post("https://localhost:8080/api/Borrow/borrow", payload, {
+      await axios.post("/api/Borrow/borrow", payload, {
         headers: getAuthHeaders(),
       });
 
