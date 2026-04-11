@@ -24,8 +24,10 @@ const subscriptionSchema = z.object({
 
 export type SubscriptionFormData = z.infer<typeof subscriptionSchema>;
 
+// التعديل هنا في ملف SubscriptionStep.tsx
 interface SubscriptionStepProps {
-  onSubmit: (data: SubscriptionFormData) => Promise<any>;
+  // غير هذا السطر ليكون هكذا:
+  onSubmit: (data: SubscriptionFormData) => void | Promise<any>; 
   onBack: (currentValues: SubscriptionFormData) => void;
   loading: boolean;
   initialData?: SubscriptionFormData | null;
@@ -84,7 +86,6 @@ export default function SubscriptionStep({
         setClassifications(classRes.data);
         setPaymentMethods(paymentRes.data);
       } catch (error: any) {
-        console.error("Error fetching subscription meta:", error);
         if (error.response && error.response.status === 401) {
           localStorage.removeItem("token");
           window.location.href = "/login";
@@ -116,45 +117,66 @@ export default function SubscriptionStep({
     }
   }, [watchedStartDate, setValue, isReadOnly]);
 
-  const showUserCredentials = (userName: string, password: string) => {
-    MySwal.fire({
-      title: <span className="text-primary font-bold">تم حفظ الاشتراك بنجاح</span>,
-      html: (
-        <div className="mt-4 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-primary/20 text-right" dir="rtl">
-          <p className="text-sm text-muted-foreground mb-3">بيانات دخول المستخدم الجديد:</p>
-          <div className="space-y-2">
-            <div className="flex justify-between p-2 bg-white rounded-lg shadow-sm">
-              <span className="font-bold">اسم المستخدم:</span>
-              <span className="font-mono text-primary select-all">{userName}</span>
-            </div>
-            <div className="flex justify-between p-2 bg-white rounded-lg shadow-sm">
-              <span className="font-bold">كلمة المرور:</span>
-              <span className="font-mono text-primary select-all">{password}</span>
-            </div>
+const showUserCredentials = (userName: string, password: string) => {
+  MySwal.fire({
+    title: <span className="text-primary font-bold">تم حفظ الاشتراك بنجاح</span>,
+    html: (
+      <div className="mt-4 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-primary/20 text-right" dir="rtl">
+        <p className="text-sm text-muted-foreground mb-3">بيانات دخول المستخدم الجديد:</p>
+        <div className="space-y-2">
+          <div className="flex justify-between p-2 bg-white rounded-lg shadow-sm">
+            <span className="font-bold">اسم المستخدم:</span>
+            <span className="font-mono text-primary select-all">{userName}</span>
+          </div>
+          <div className="flex justify-between p-2 bg-white rounded-lg shadow-sm">
+            <span className="font-bold">كلمة المرور:</span>
+            <span className="font-mono text-primary select-all">{password}</span>
           </div>
         </div>
-      ),
-      icon: "success",
-      confirmButtonText: " موافق",
-      confirmButtonColor: "#3b82f6",
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      customClass: { popup: 'rounded-[2rem]', confirmButton: 'px-8 py-2 rounded-xl' }
-    }).then((result) => {
-      if (result.isConfirmed) resetForm();
-    });
-  };
-
-  const handleFormSubmit = async (data: SubscriptionFormData) => {
-    try {
-      const result: any = await onSubmit(data);
-      if (result && result.userName) {
-        showUserCredentials(result.userName, result.password);
-      }
-    } catch (error) {
-      console.error("Submission error:", error);
+      </div>
+    ),
+    icon: "success",
+    confirmButtonText: "موافق",
+    confirmButtonColor: "#3b82f6",
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    customClass: { 
+      popup: 'rounded-[2rem]', 
+      confirmButton: 'px-8 py-2 rounded-xl' 
     }
-  };
+  }).then(() => {
+    // ✅ بس رجعي الزر طبيعي
+    setIsSubmitting(false);
+  });
+};
+ // أضيفي هذه الحالة في بداية المكون مع الـ States الأخرى
+const [isSubmitting, setIsSubmitting] = useState(false);
+
+const handleFormSubmit = async (data: SubscriptionFormData) => {
+  if (loading || isSubmitting) return;
+
+  setIsSubmitting(true);
+
+  try {
+    const result: any = await onSubmit(data);
+
+    if (result) {
+      const userName = result.userName || result.$value?.userName;
+      const password = result.password || result.$value?.password;
+
+      // ✅ أول إشي: سكري المودال
+      resetForm();
+
+      // ✅ بعده: افرجي السويت اليرت
+      if (userName) {
+        showUserCredentials(userName, password);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    setIsSubmitting(false);
+  }
+};
 
   const inputClass = cn(
     "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
@@ -341,21 +363,22 @@ export default function SubscriptionStep({
       >
         السابق
       </button>
-      <button
-        type="submit"
-        disabled={loading}
-        className="flex-[2] py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2 shadow-card hover:shadow-elevated transition-all disabled:opacity-50"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin" /> جاري الحفظ...
-          </>
-        ) : (
-          <>
-            <Save className="w-5 h-5" /> حفظ وإنهاء الاشتراك
-          </>
-        )}
-      </button>
+     <button
+  type="submit"
+  // تعطيل الزر إذا كان الأب يحمل أو المكون نفسه يحمل
+  disabled={loading || isSubmitting}
+  className="flex-[2] py-3 rounded-xl gradient-primary text-white font-bold flex items-center justify-center gap-2 shadow-card hover:shadow-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {loading || isSubmitting ? (
+    <>
+      <Loader2 className="w-5 h-5 animate-spin" /> جاري الحفظ...
+    </>
+  ) : (
+    <>
+      <Save className="w-5 h-5" /> حفظ وإنهاء الاشتراك
+    </>
+  )}
+</button>
     </div>
   )}
 </div>

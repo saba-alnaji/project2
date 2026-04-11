@@ -7,7 +7,7 @@ import axios from "axios";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// ================= Types & Schema =================
+// ================= Types & Schema (نفس اللي عندك بالظبط) =================
 
 interface Guarantor {
   guarantorId?: string | number | null;
@@ -47,7 +47,6 @@ interface GuarantorStepProps {
   onBack: () => void;
   previousGuarantor?: any;
   previousFormValues?: any;
-
 }
 
 const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
@@ -55,20 +54,20 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
 
   const [nationalId, setNationalId] = useState(previousGuarantor?.idnumber || previousFormValues?.idnumber || "");
   const [searchLoading, setSearchLoading] = useState(false);
-  const [foundGuarantor, setFoundGuarantor] = useState<Guarantor | null>(previousGuarantor || null);
+  const [foundGuarantor, setFoundGuarantor] = useState<Guarantor | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [searched, setSearched] = useState(!!previousGuarantor || !!previousFormValues);
+  const [searched, setSearched] = useState(false);
   const [mode, setMode] = useState<"search" | "found" | "new-form">("search");
 
   const { register, handleSubmit, formState: { errors }, watch, setValue, getValues, reset } = useForm<GuarantorFormData>({
     resolver: zodResolver(guarantorSchema),
     mode: "onTouched",
-    defaultValues: previousFormValues || {
+    defaultValues: {
       phoneNumbers: [""],
     },
   });
 
-  // --- دالات التصفية الحية (نفس الموجودة في كود المشترك) ---
+  // --- دالات التصفية الحية (نفس اللي عندك بالظبط) ---
   const filterNumbers = (val: string) => val.replace(/[^\d]/g, "");
   const filterArabic = (val: string) => val.replace(/[^\u0621-\u064A\s]/g, "");
   const filterNoEnglish = (val: string) => val.replace(/[a-zA-Z]/g, "");
@@ -79,18 +78,24 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
     setValue(name, filteredValue, { shouldValidate: true });
   };
 
+  // تعديل الـ useEffect لضمان استرجاع البيانات عند العودة
   useEffect(() => {
-    if (previousGuarantor && !previousGuarantor.isNew) {
-      setFoundGuarantor(previousGuarantor);
-      setNationalId(previousGuarantor.idnumber || previousGuarantor.IDNumber || "");
-      setMode("found");
+    if (previousGuarantor) {
       setSearched(true);
-    } else if (previousFormValues?.isNew) {
-      setMode("new-form");
-      setNotFound(true);
-      setSearched(true);
-      setNationalId(previousFormValues.idnumber || "");
-      reset(previousFormValues);
+      setNationalId(previousGuarantor.idnumber || "");
+      
+      if (previousGuarantor.isNew) {
+        setMode("new-form");
+        reset(previousGuarantor); // تعبئة الفورم إذا كان جديداً
+      } else {
+        setMode("found");
+        setFoundGuarantor(previousGuarantor); // عرض البيانات إذا كان موجوداً
+      }
+    } else if (previousFormValues) {
+       // في حال وجود قيم فورم فقط بدون كائن كفيل كامل
+       setMode("new-form");
+       setSearched(true);
+       reset(previousFormValues);
     }
   }, [previousGuarantor, previousFormValues, reset]);
 
@@ -152,14 +157,8 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
       }
     } catch (error: any) {
       setSearched(true);
-      if (error.response && error.response.status === 401) {
-        localStorage.removeItem("token");
-        toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
-        window.location.href = "/login";
-        return;
-      }
       setNotFound(true);
-      const serverMsg = error.response?.data?.message || error.response?.data || "خطأ في البحث عن الكفيل";
+      const serverMsg = error.response?.data?.message || "خطأ في البحث عن الكفيل";
       toast.error(serverMsg);
     } finally {
       setSearchLoading(false);
@@ -184,6 +183,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
 
   const mobile_numbers = watch("phoneNumbers") ?? [""];
 
+  // نفس دالة التصميم تبعتك بالظبط
   const inputClassCustom = (name: keyof GuarantorFormData, isReadOnly: boolean) => cn(
     "w-full px-4 py-3 rounded-xl border-2 text-base transition-all focus:outline-none",
     isReadOnly
@@ -258,9 +258,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>
-                رقم الهوية {mode === "new-form" && <span className="text-destructive">*</span>}
-              </label>
+              <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>رقم الهوية <span className="text-destructive">*</span></label>
               <input 
                 {...(mode === "new-form" ? { ...register("idnumber"), onChange: handleLiveChange("idnumber", filterNumbers) } : {})} 
                 value={mode === "found" ? foundGuarantor?.idnumber : undefined}
@@ -272,9 +270,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
               {errors.idnumber && mode === "new-form" && <p className="text-[10px] text-destructive mt-1 mr-2">{errors.idnumber.message}</p>}
             </div>
             <div>
-              <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>
-                الوظيفة {mode === "new-form" && <span className="text-destructive">*</span>}
-              </label>
+              <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>الوظيفة <span className="text-destructive">*</span></label>
               <input 
                 {...(mode === "new-form" ? { ...register("job"), onChange: handleLiveChange("job", filterArabic) } : {})} 
                 value={mode === "found" ? foundGuarantor?.job : undefined}
@@ -287,9 +283,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
           </div>
 
           <div>
-            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>
-              الاسم الرباعي {mode === "new-form" && <span className="text-destructive">*</span>}
-            </label>
+            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>الاسم الرباعي <span className="text-destructive">*</span></label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="flex flex-col">
                 <input {...(mode === "new-form" ? { ...register("firstName"), onChange: handleLiveChange("firstName", filterArabic) } : {})} value={mode === "found" ? foundGuarantor?.firstName : undefined} className={inputClassCustom("firstName", mode === "found")} readOnly={mode === "found"} placeholder="الأول" />
@@ -311,7 +305,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
           </div>
 
           <div>
-            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>العنوان </label>
+            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>العنوان</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <input {...(mode === "new-form" ? { ...register("street"), onChange: handleLiveChange("street", filterNoEnglish) } : {})} value={mode === "found" ? foundGuarantor?.street || "" : undefined} className={inputClassCustom("street", mode === "found")} readOnly={mode === "found"} placeholder="الشارع" />
               <input {...(mode === "new-form" ? { ...register("village"), onChange: handleLiveChange("village", filterNoEnglish) } : {})} value={mode === "found" ? foundGuarantor?.village || "" : undefined} className={inputClassCustom("village", mode === "found")} readOnly={mode === "found"} placeholder="القرية" />
@@ -320,9 +314,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
           </div>
 
           <div>
-            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>
-              رقم الجوال {mode === "new-form" && <span className="text-destructive">*</span>}
-            </label>
+            <label className={cn("block text-xs font-bold mb-1 mr-2", mode === "found" ? "text-green-600" : "text-slate-500")}>رقم الجوال <span className="text-destructive">*</span></label>
             <div className="space-y-2">
               {(mode === "found" ? (foundGuarantor?.phoneNumbers || [""]) : mobile_numbers).map((num, index) => (
                 <div key={index} className="flex flex-col gap-1">
@@ -331,10 +323,10 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
                       value={mode === "found" ? num : mobile_numbers[index]}
                       onChange={(e) => {
                         if (mode === "new-form") {
-                           const filtered = filterPhone(e.target.value);
-                           const arr = [...mobile_numbers];
-                           arr[index] = filtered;
-                           setValue("phoneNumbers", arr, { shouldValidate: true });
+                          const filtered = filterPhone(e.target.value);
+                          const arr = [...mobile_numbers];
+                          arr[index] = filtered;
+                          setValue("phoneNumbers", arr, { shouldValidate: true });
                         }
                       }}
                       className={inputClassCustom("phoneNumbers", mode === "found")}
@@ -362,9 +354,7 @@ const GuarantorStep = forwardRef((props: GuarantorStepProps, ref) => {
           </div>
 
           <div className="mt-6 pt-4 border-t border-slate-200 flex flex-col items-center gap-2">
-            <p className="text-sm text-slate-500 italic text-center">
-              هل تريد تغيير الكفيل أو البحث عن رقم هوية آخر؟
-            </p>
+            <p className="text-sm text-slate-500 italic text-center">هل تريد تغيير الكفيل أو البحث عن رقم هوية آخر؟</p>
             <button 
               type="button"
               onClick={() => { setMode("search"); setSearched(false); setNotFound(false); }} 

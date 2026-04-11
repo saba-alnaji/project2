@@ -8,11 +8,10 @@ import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { CheckCircle, RefreshCw, AlertTriangle, Clock } from "lucide-react";
 
-const API_BASE_URL = "https://localhost:8080";
 const getToken = (): string => localStorage.getItem("token") ?? "";
 
 const apiFetch = async (path: string, options: RequestInit = {}) => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",

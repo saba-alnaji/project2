@@ -54,26 +54,32 @@ export default function ReturnLoanPage() {
     note: "",
   });
 
-  const loadInitialData = async () => {
-    try {
-      const [loansData, conditions, fines] = await Promise.all([
-        apiFetch("/api/Borrow/list?status=Active"),
-        apiFetch("/api/BookCondition"),
-        apiFetch("/api/FineType"),
-      ]);
+ const loadInitialData = async () => {
+  try {
+    const [loansData, conditions, fines] = await Promise.all([
+      apiFetch("/api/Borrow/list?status=Active"),
+      apiFetch("/api/BookCondition"), // تأكد أن هذا الرابط يعيد بيانات في السيرفر المرفوع
+      apiFetch("/api/FineType"),
+    ]);
 
-      const data = loansData || [];
-      setLoans(data);
-      setStats({
-        total: data.length,
-        today: data.filter((l: any) => 
-          new Date(l.startDate).toDateString() === new Date().toDateString()
-        ).length,
-      });
-    } catch (error) {
-      toast.error("فشل في جلب البيانات");
-    }
-  };
+    // حفظ الإعارات للجدول
+    setLoans(loansData || []);
+    
+    // **هذه الأسطر هي التي ستجعل القوائم المنسدلة تظهر**
+    setBookConditions(conditions || []); 
+    setFineTypes(fines || []);
+
+    setStats({
+      total: (loansData || []).length,
+      today: (loansData || []).filter((l: any) => 
+        new Date(l.startDate).toDateString() === new Date().toDateString()
+      ).length,
+    });
+  } catch (error) {
+    console.error("Error loading data:", error);
+    toast.error("فشل في جلب البيانات من السيرفر");
+  }
+};
 
   useEffect(() => { loadInitialData(); }, []);
 

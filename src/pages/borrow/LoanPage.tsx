@@ -82,8 +82,7 @@ export default function LoanPage() {
 
   const handleRenew = async (borrowID: number) => {
     try {
-      await axios.patch(
-        `https://localhost:8080/api/Borrow/renew/${borrowID}`,
+      await axios.patch(`/api/Borrow/renew/${borrowID}`,
         {}, 
         { headers: getAuthHeaders() }
       );

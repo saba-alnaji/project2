@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import {
-  Search, Save, Loader2, UserCheck, ShieldCheck, PencilLine, X, Plus, UserPlus, Info, FileText, ArrowRight,
-  ArrowLeft
+  Search, Save, Loader2, UserCheck, ShieldCheck, PencilLine, X, Plus, UserPlus, Info, FileText
 } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
@@ -42,6 +41,12 @@ export default function EditSubscriptionPage() {
   });
 
   const mobile_numbers = watch("phoneNumbers") || [""];
+
+  // --- دوال التحقق المضافة ---
+  const arabicOnly = (value: string) => value.replace(/[^\u0621-\u064A\s]/g, "");
+  const numbersOnly = (value: string) => value.replace(/\D/g, "");
+  const addressValidation = (value: string) => value.replace(/[a-zA-Z]/g, ""); // يمنع الإنجليزية فقط
+  const phoneValidation = (value: string) => value.replace(/[^\d+]/g, ""); // أرقام وعلامة + فقط
 
   const handleInitialSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -107,7 +112,7 @@ export default function EditSubscriptionPage() {
   };
 
   const onFinishUpdate = async (finalGuarantor: any) => {
-    const isValidPhones = finalGuarantor.phoneNumbers.every((p: string) => p && /^\d{7,15}$/.test(p)) && finalGuarantor.phoneNumbers.length > 0;
+    const isValidPhones = finalGuarantor.phoneNumbers.every((p: string) => p && /^\d{7,15}$/.test(p.replace('+', ''))) && finalGuarantor.phoneNumbers.length > 0;
     if (!isValidPhones) {
       toast.error("يرجى التأكد من صحة أرقام الجوال"); return;
     }
@@ -162,7 +167,7 @@ export default function EditSubscriptionPage() {
   return (
     <div className="max-w-5xl mx-auto p-4 pb-20" dir="rtl">
       <div className="mb-8 ">
-        <div className="flex  gap-3 mb-2">
+        <div className="flex gap-3 mb-2">
           <PencilLine className="w-10 h-10 text-primary" />
           <h1 className="text-3xl font-black text-slate-900">إدارة وتعديل الاشتراك</h1>
         </div>
@@ -248,6 +253,7 @@ export default function EditSubscriptionPage() {
                             required: "رقم الهوية مطلوب",
                             pattern: { value: /^\d{9}$/, message: "رقم الهوية يجب أن يكون 9 أرقام" }
                           })}
+                          onChange={(e) => setValue("idnumber", numbersOnly(e.target.value))}
                           className={inputClass("idnumber")}
                           dir="ltr"
                           placeholder="9 أرقام فقط"
@@ -255,27 +261,32 @@ export default function EditSubscriptionPage() {
                         {errors.idnumber && <p className="text-xs text-destructive mt-1">{errors.idnumber.message as string}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold mb-1 text-slate-700">الوظيفة</label>
-                        <input {...register("job")} className={inputClass("job")} placeholder="الوظيفة" />
+                        <label className="block text-sm font-semibold mb-1 text-slate-700">الوظيفة<span className="text-destructive">*</span></label>
+                        <input 
+                            {...register("job", { required: "الوظيفة مطلوبة" })} 
+                            onChange={(e) => setValue("job", arabicOnly(e.target.value))}
+                            className={inputClass("job")} 
+                            placeholder="الوظيفة (بالعربي فقط)" 
+                        />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold mb-2 text-slate-700">الاسم الرباعي</label>
+                      <label className="block text-sm font-semibold mb-2 text-slate-700">الاسم الرباعي<span className="text-destructive">*</span></label>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <input {...register("firstName")} className={inputClass("firstName")} placeholder="الأول" />
-                        <input {...register("fatherName")} className={inputClass("fatherName")} placeholder="الأب" />
-                        <input {...register("grandfatherName")} className={inputClass("grandfatherName")} placeholder="الجد" />
-                        <input {...register("familyName")} className={inputClass("familyName")} placeholder="العائلة" />
+                        <input {...register("firstName", { required: true })} onChange={(e) => setValue("firstName", arabicOnly(e.target.value))} className={inputClass("firstName")} placeholder="الأول" />
+                        <input {...register("fatherName", { required: true })} onChange={(e) => setValue("fatherName", arabicOnly(e.target.value))} className={inputClass("fatherName")} placeholder="الأب" />
+                        <input {...register("grandfatherName", { required: true })} onChange={(e) => setValue("grandfatherName", arabicOnly(e.target.value))} className={inputClass("grandfatherName")} placeholder="الجد" />
+                        <input {...register("familyName", { required: true })} onChange={(e) => setValue("familyName", arabicOnly(e.target.value))} className={inputClass("familyName")} placeholder="العائلة" />
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-semibold mb-2 text-slate-700">العنوان</label>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <input {...register("street")} className={inputClass("street")} placeholder="الشارع" />
-                        <input {...register("village")} className={inputClass("village")} placeholder="القرية" />
-                        <input {...register("neighborhood")} className={inputClass("neighborhood")} placeholder="الحي" />
+                        <input {...register("street")} onChange={(e) => setValue("street", addressValidation(e.target.value))} className={inputClass("street")} placeholder="الشارع" />
+                        <input {...register("village")} onChange={(e) => setValue("village", addressValidation(e.target.value))} className={inputClass("village")} placeholder="القرية" />
+                        <input {...register("neighborhood")} onChange={(e) => setValue("neighborhood", addressValidation(e.target.value))} className={inputClass("neighborhood")} placeholder="الحي" />
                       </div>
                     </div>
 
@@ -287,7 +298,7 @@ export default function EditSubscriptionPage() {
                             <div className="flex gap-2">
                               <input
                                 value={mobile_numbers[index] || ""}
-                                onChange={(e) => updateMobile(index, e.target.value)}
+                                onChange={(e) => updateMobile(index, phoneValidation(e.target.value))}
                                 className={cn(inputClass("phoneNumbers"), "flex-1")}
                                 dir="ltr"
                                 placeholder="05xxxxxxxx"
@@ -302,7 +313,7 @@ export default function EditSubscriptionPage() {
                                 </button>
                               )}
                             </div>
-                            {mobile_numbers[index] && !/^\d{7,15}$/.test(mobile_numbers[index]) && (
+                            {mobile_numbers[index] && !/^\+?\d{10,15}$/.test(mobile_numbers[index]) && (
                               <p className="text-[10px] text-destructive">تنسيق رقم غير صحيح</p>
                             )}
                           </div>
@@ -324,8 +335,6 @@ export default function EditSubscriptionPage() {
                   >
                     <UserPlus className="w-5 h-5" /> هل تريد تغيير الكفيل بالكامل؟ ابحث عن كفيل آخر
                   </button>
-
-                  
                 </div>
               ) : (
                 <div className="animate-in zoom-in-95">
@@ -351,7 +360,6 @@ export default function EditSubscriptionPage() {
                  </button>
                   <button 
                       onClick={() => {
-                        // تعديل مهم: تحديث البيانات في الـ State بناءً على الوضع الحالي
                         if (showNewGuarantorSearch) {
                           const newData = guarantorRef.current?.getCurrentValues();
                           if (newData) setGuarantorData(newData);
@@ -377,7 +385,7 @@ export default function EditSubscriptionPage() {
               <SubscriptionStep
                 initialData={subscriptionData}
                 isReadOnly={true} 
-                onSubmit={async () => {}} // Dummy for ReadOnly
+                onSubmit={async () => {}} 
                 onBack={() => setCurrentStep(2)}
                 loading={false}
                 resetForm={() => {}} 
@@ -393,7 +401,6 @@ export default function EditSubscriptionPage() {
 
                 <button
                   onClick={() => {
-                    // تعديل مهم: نستخدم دائماً البيانات المخزنة في الـ State (guarantorData)
                     if (guarantorData) {
                       onFinishUpdate(guarantorData);
                     } else if (!showNewGuarantorSearch) {

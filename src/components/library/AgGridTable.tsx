@@ -22,7 +22,8 @@ interface AgGridTableProps {
   showPrint?: boolean;
   pageSize?: number;
   enableRtl?: boolean;
-  printValueFormatter?: (field: string, value: any) => string; // مهم جداً
+  pagination?: boolean; // التعديل: أضفنا الخاصية هنا لحل مشكلة الـ TypeScript
+  printValueFormatter?: (field: string, value: any) => string;
 }
 
 export default function AgGridTable({
@@ -32,6 +33,7 @@ export default function AgGridTable({
   showExport = true,
   showPrint = true,
   pageSize = 10,
+  pagination = true, // التعديل: استلام الخاصية مع قيمة افتراضية
   printValueFormatter,
 }: AgGridTableProps) {
   const gridRef = useRef<AgGridReact>(null);
@@ -44,7 +46,6 @@ export default function AgGridTable({
     suppressMovable: true,
     wrapText: true,
     cellStyle: { whiteSpace: 'normal' as const },
-    // التعديل: إضافة قراءة القيمة للتلميح (Tooltip)
     tooltipValueGetter: (p: any) => p.value,
   }), []);
 
@@ -86,6 +87,7 @@ export default function AgGridTable({
       [[title || "تقرير"]],
       { origin: "A1" }
     );
+
     const colWidths = Object.keys(data[0] || {}).map((key) => ({
       wch: Math.max(
         key.length,
@@ -130,10 +132,16 @@ export default function AgGridTable({
           c.field?.toLowerCase().includes("date") &&
           val
         ) {
-          const d = new Date(val);
-          val = isNaN(d.getTime()) ? val : d.toLocaleDateString("ar-EG");
+          if (c.field?.toLowerCase().includes("date") && val) {
+            if (typeof val === "string") {
+              // هذا خاص بـ DateOnly من الباك
+              val = val.split("T")[0];
+            } else {
+              const d = new Date(val);
+              val = isNaN(d.getTime()) ? val : d.toLocaleDateString("ar-EG");
+            }
+          }
         }
-
 
         if (typeof val === "string") {
           val = val.replace(/<[^>]*>?/gm, "");
@@ -151,6 +159,16 @@ export default function AgGridTable({
       <head>
         <title>${title || "تقرير"}</title>
         <style>
+        @page {
+  margin: 20mm;
+}
+
+.footer {  position: fixed;bottom: 10px;  left: 0;  right: 0;  text-align: center;  font-size: 11px;  color: #555;
+}
+
+body {
+  padding-bottom: 40px; /* عشان ما يغطي على الجدول */
+}
           @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
           body { font-family: 'Cairo', sans-serif; direction: rtl; padding: 30px; color: #333; }
           .header-table { width: 100%; border-bottom: 2px solid #000; margin-bottom: 20px; padding-bottom: 10px; border-collapse: collapse; }
@@ -162,31 +180,12 @@ export default function AgGridTable({
           table.data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           table.data-table th, table.data-table td { border: 1px solid #000; padding: 8px; text-align: center; font-size: 12px; }
           table.data-table th { background: #f0f0f0; }
-          .footer-section { margin-top: 50px; display: flex; justify-content: space-between; padding: 0 40px; }
-       @media print {
-  body {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  table.data-table {
-    direction: rtl;
-  }
-
-  table {
-    page-break-inside: auto;
-  }
-
-  tr {
-    page-break-inside: avoid;
-    page-break-after: auto;
-  }
-
-  .footer-section {
-    page-break-inside: avoid;
-  }
-}
-          </style>
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+          }
+        </style>
       </head>
       <body>
         <table class="header-table">
@@ -207,24 +206,24 @@ export default function AgGridTable({
             </td>
           </tr>
         </table>
-
         <div class="report-title">${title || "تقرير سجل البيانات"}</div>
-
         <table class="data-table">
           <thead>
             <tr>${cols.map(c => `<th>${c.headerName}</th>`).join("")}</tr>
           </thead>
           <tbody>
             ${tableRows}
+            
           </tbody>
         </table>
-
-        
+        <div class="footer">
+  © 2025–2026 جميع حقوق الملكية الفكرية محفوظة وفقًا لمذكرة التفاهم الموقعة بين جامعة فلسطين التقنية – خضوري وبلدية طولكرم.
+</div>
         <script>
           window.onload = () => {
             setTimeout(() => { window.print(); window.close(); }, 700);
           };
-        <\/script>
+        </script>
       </body>
       </html>`;
 
@@ -256,11 +255,10 @@ export default function AgGridTable({
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           theme={myTheme}
-          pagination={true}
+          pagination={pagination} // التعديل: أصبح يأخذ القيمة من الـ props
           paginationPageSize={pageSize}
           enableRtl={true}
           animateRows={true}
-          // التعديل: تفعيل خاصية تلميحات المتصفح
           enableBrowserTooltips={true}
         />
       </div>

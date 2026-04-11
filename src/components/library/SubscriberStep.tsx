@@ -60,11 +60,41 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
     const filteredValue = filterFn(e.target.value);
     setValue(name, filteredValue, { shouldValidate: true });
   };
-  useEffect(() => {
-    if (initialData && apiCities.length > 0) {
-      reset(initialData);
+
+useEffect(() => {
+  // بنشغل الكود فقط إذا البيانات وصلت وقائمة المدن تحملت
+  if (initialData && apiCities.length > 0) {
+    
+    // 1. استخراج الـ ID من البيانات القادمة (بجرب كل الاحتمالات)
+    let rawCityId = (initialData as any).cityId || (initialData as any).cityID;
+    let finalCityId = "";
+
+    if (rawCityId) {
+      finalCityId = String(rawCityId);
+    } 
+    // 2. إذا لسبب ما الـ ID مش موجود، بنعتمد على اسم المدينة "جنين"
+    else if ((initialData as any).city) {
+      const cityName = (initialData as any).city;
+      const found = apiCities.find(c => 
+        (c.name || (c as any).cityName || (c as any).CityName) === cityName
+      );
+      if (found) {
+        finalCityId = String(found.id || (found as any).cityId || (found as any).cityID);
+      }
     }
-  }, [initialData, apiCities, reset]);
+
+    // 3. تحديث الفورم
+    reset({
+      ...initialData,
+      cityId: finalCityId, // هون بنعطي الـ Select القيمة اللي بستناها
+      // ضمان أن الأرقام نصوص عشان Zod
+      memberNumber: String(initialData.memberNumber || ""),
+      idnumber: String(initialData.idnumber || "")
+    });
+  }
+}, [initialData, apiCities, reset]);
+
+
   useEffect(() => {
     const fetchCities = async () => {
       try {
@@ -74,7 +104,6 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
         });
 
         // تأكدي من شكل البيانات الراجعة
-        console.log("Cities from API:", response.data);
         setApiCities(Array.isArray(response.data) ? response.data : []);
       } catch (error: any) {
         console.error("Error fetching cities:", error);
@@ -181,25 +210,23 @@ export default function SubscriberStep({ onNext, initialData }: SubscriberStepPr
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 text-sm">
             <div className="flex flex-col">
               <label className="font-semibold mb-2 block text-sm">المحافظة <span className="text-destructive">*</span></label>
-              <select
-                {...register("cityId")}
-                className={inputClass("cityId")}
-              >
-                <option value="">اختر المحافظة</option>
-                {apiCities.map((city: any) => {
-                  // هنا السحر: بنجرب كل المسميات الممكنة للـ ID
-                  const cId = (city.cityId || city.cityID || city.id || city.Id)?.toString();
-                  const cName = city.cityName || city.CityName || city.name || city.Name;
+             <select
+  {...register("cityId")}
+  className={inputClass("cityId")}
+>
+  <option value="">اختر المحافظة</option>
+  {apiCities.map((city: any) => {
+    // توحيد جلب الـ ID والاسم بغض النظر عن طريقة كتابتهم (Capital أو Small)
+    const cId = String(city.cityId || city.cityID || city.id || city.Id || "");
+    const cName = city.cityName || city.CityName || city.name || city.Name;
 
-                  if (!cId) return null;
-
-                  return (
-                    <option key={cId} value={cId}>
-                      {cName}
-                    </option>
-                  );
-                })}
-              </select>
+    return (
+      <option key={cId} value={cId}>
+        {cName}
+      </option>
+    );
+  })}
+</select>
               {errors.cityId && <p className="text-destructive text-[11px] mt-1">{errors.cityId.message}</p>}
             </div>
 

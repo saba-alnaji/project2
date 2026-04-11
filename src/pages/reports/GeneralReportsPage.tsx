@@ -1,60 +1,64 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import AgGridTable from "@/components/library/AgGridTable";
+import { toast } from "sonner";
 
 type Tab = "loans" | "subscribers" | "late";
+
+const API_BASE_URL = "/api/GeneralReports";
 
 export default function GeneralReportsPage() {
   const [tab, setTab] = useState<Tab>("loans");
   const [loanData, setLoanData] = useState<any[]>([]);
   const [subData, setSubData] = useState<any[]>([]);
   const [lateData, setLateData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const loadData = async () => {
-    const { data: loans } = await supabase
-      .from("loans").select("*, books(*), subscribers(*)")
-      .order("loan_date", { ascending: false });
-    setLoanData((loans || []).map((l: any) => ({
-      title: l.books?.title || "—",
-      author: l.books?.author || "—",
-      serial_number: l.books?.serial_number || "—",
-      loan_date: l.loan_date,
-      subscriber: l.subscribers?.name || "—",
-    })));
+  const fetchData = async () => {
+    setLoading(true);
+    const token = localStorage.getItem("token");
 
-    const { data: subs } = await supabase
-      .from("subscribers").select("*, subscriptions(*)")
-      .order("created_at", { ascending: false });
-    setSubData((subs || []).map((s: any) => {
-      const lastSub = Array.isArray(s.subscriptions) ? s.subscriptions[s.subscriptions.length - 1] : s.subscriptions;
-      return {
-        subscriber_number: s.subscriber_number || "—",
-        name: s.name,
-        subscription_date: lastSub?.start_date || "—",
-        subscription_duration: lastSub?.duration || "—",
-      };
-    }));
+    const requestOptions = {
+      headers: {
+"Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    };
 
-    const today = new Date().toISOString().split("T")[0];
-    const { data: late } = await supabase
-      .from("loans").select("*, books(*), subscribers(*)")
-      .eq("status", "active").lt("expected_return_date", today);
-    setLateData((late || []).map((l: any) => {
-      const expected = new Date(l.expected_return_date);
-      const now = new Date();
-      const lateDays = Math.max(0, Math.floor((now.getTime() - expected.getTime()) / (1000 * 60 * 60 * 24)));
-      return {
-        subscriber_name: l.subscribers?.name || "—",
-        book_title: l.books?.title || "—",
-        serial_number: l.books?.serial_number || "—",
-        author: l.books?.author || "—",
-        loan_date: l.loan_date,
-        return_date: l.expected_return_date,
-        late_days: lateDays,
-      };
-    }));
+    try {
+      const [resLoans, resSubs, resLate] = await Promise.all([
+        fetch(`${API_BASE_URL}/borrow?page=1&pageSize=200`, requestOptions),
+        fetch(`${API_BASE_URL}/members?page=1&pageSize=200`, requestOptions),
+        fetch(`${API_BASE_URL}/late-borrows?page=1&pageSize=200`, requestOptions)
+      ]);
+
+      const responses = [resLoans, resSubs, resLate];
+      for (const response of responses) {
+        if (response.status === 401) {
+          localStorage.removeItem("token");
+          toast.error("انتهت الجلسة، الرجاء تسجيل الدخول مجددًا");
+          window.location.href = "/login";
+          return;
+        }
+      }
+
+      const loansJson = await resLoans.json();
+      const subsJson = await resSubs.json();
+      const lateJson = await resLate.json();
+
+      setLoanData(loansJson.data || []);
+      setSubData(subsJson.data || []);
+      setLateData(lateJson.data || []);
+
+    } catch (error: any) {
+      console.error("Error:", error);
+      toast.error("حدث خطأ أثناء جلب البيانات");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tabs: { id: Tab; label: string; emoji: string }[] = [
@@ -64,64 +68,99 @@ export default function GeneralReportsPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-3xl font-black text-foreground mb-1">تقارير عامة</h1>
-        <p className="text-muted-foreground">تقارير شاملة عن الإعارات والمشتركين والكتب المتأخرة.</p>
+    <div className="max-w-[98%] mx-auto py-8 animate-fade-in print:p-0">
+      <div className="mb-8 flex justify-between items-end print:hidden">
+        <div>
+          <h1 className="text-4xl font-black text-foreground mb-2">التقارير العامة</h1>
+          <p className="text-muted-foreground text-lg">نظام التقارير الموحد لمكتبة بلدية طولكرم.</p>
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-3 mb-8 print:hidden">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all ${
-              tab === t.id ? "gradient-primary text-white shadow-card" : "bg-card border border-border text-foreground hover:bg-muted"
+            className={`flex-1 py-4 rounded-2xl font-bold text-md transition-all shadow-sm ${
+              tab === t.id 
+              ? "bg-primary text-white scale-[1.02] shadow-lg" 
+              : "bg-card border border-border text-foreground hover:bg-muted"
             }`}>
             {t.emoji} {t.label}
           </button>
         ))}
       </div>
 
-      {tab === "loans" && (
-        <AgGridTable
-          columnDefs={[
-            { field: "title", headerName: "عنوان الكتاب" },
-            { field: "author", headerName: "المؤلف" },
-            { field: "serial_number", headerName: "رقم التسلسل" },
-            { field: "loan_date", headerName: "تاريخ الإعارة" },
-            { field: "subscriber", headerName: "المشترك" },
-          ]}
-          rowData={loanData}
-          title="تقارير الإعارة"
-        />
-      )}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin text-4xl mb-4 text-primary">⏳</div>
+          <p className="text-xl font-medium">جاري معالجة البيانات من السيرفر...</p>
+        </div>
+      ) : (
+        <div className="bg-card rounded-3xl shadow-xl border border-border overflow-hidden print:shadow-none print:border-none">
+          
+          {tab === "loans" && (
+            <div className="h-[800px]">
+            <AgGridTable
+              columnDefs={[
+                { field: "memberIdNumber", headerName: "رقم الهوية", maxWidth: 140 },
+                { field: "memberName", headerName: "اسم المشترك", minWidth: 180 },
+                { field: "bookTitle", headerName: "عنوان الكتاب", minWidth: 180 },
+                { field: "serialNumber", headerName: "الرقم التسلسلي", maxWidth: 120 },
+                { field: "authors", headerName: "المؤلفون", minWidth: 150 },
+                { field: "startDate", headerName: "تاريخ الإعارة" },
+                { field: "endDate", headerName: "تاريخ الإرجاع" },
+              ]}
+              rowData={loanData}
+              title="تقرير سجل الإعارات العام"
+              pagination={true}
+              pageSize={15}
+            />
+            </div>
+          )}
 
-      {tab === "subscribers" && (
-        <AgGridTable
-          columnDefs={[
-            { field: "subscriber_number", headerName: "رقم المشترك" },
-            { field: "name", headerName: "اسم المشترك" },
-            { field: "subscription_date", headerName: "تاريخ الاشتراك" },
-            { field: "subscription_duration", headerName: "مدة الاشتراك" },
-          ]}
-          rowData={subData}
-          title="تقارير المشتركين"
-        />
-      )}
+          {tab === "subscribers" && (
+            <div className="h-[800px]">
+            <AgGridTable
+              columnDefs={[
+                { field: "memberIdNumber", headerName: "رقم الهوية", maxWidth: 150 },
+                { field: "memberName", headerName: "اسم المشترك", minWidth: 200 },
+                { field: "subscriptionDate", headerName: "تاريخ الاشتراك" },
+                { field: "subscriptionDuration", headerName: "عدد الاشتراكات", maxWidth: 150 },
+              ]}
+              rowData={subData}
+              title="تقرير سجل المشتركين"
+              pagination={true}
+              pageSize={15}
+            />
+            </div>
+          )}
 
-      {tab === "late" && (
-        <AgGridTable
-          columnDefs={[
-            { field: "subscriber_name", headerName: "اسم المشترك" },
-            { field: "book_title", headerName: "عنوان الكتاب" },
-            { field: "serial_number", headerName: "رقم التسلسل" },
-            { field: "author", headerName: "المؤلف" },
-            { field: "loan_date", headerName: "تاريخ الإعارة" },
-            { field: "return_date", headerName: "تاريخ الإرجاع" },
-            { field: "late_days", headerName: "أيام التأخير", cellStyle: { color: "hsl(0, 80%, 55%)", fontWeight: "bold" } },
-          ]}
-          rowData={lateData}
-          title="المتأخرين"
-        />
+          {tab === "late" && (
+            <div className="h-[800px]">
+            <AgGridTable
+              columnDefs={[
+                { field: "memberIdNumber", headerName: "رقم الهوية", maxWidth: 140 },
+                { field: "memberName", headerName: "اسم المشترك", minWidth: 180 },
+                { field: "bookTitle", headerName: "الكتاب", minWidth: 180 },
+                { field: "serialNumber", headerName: "الرقم التسلسلي", maxWidth: 120 },
+                { field: "authors", headerName: "المؤلفون", minWidth: 150 },
+                { field: "startDate", headerName: "تاريخ الإعارة" },
+                { field: "endDate", headerName: "تاريخ الإرجاع" },
+                { 
+                  field: "lateDays", 
+                  headerName: "أيام التأخير", 
+                  maxWidth: 120,
+                  cellStyle: { color: 'red', fontWeight: 'bold' }
+                },
+              ]}
+              rowData={lateData}
+              title="تقرير الكتب المتأخرة"
+              pagination={true}
+              pageSize={15}
+            />
+            </div>
+          )}
+          
+        </div>
       )}
     </div>
   );
