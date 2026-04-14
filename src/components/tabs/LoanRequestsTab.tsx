@@ -138,13 +138,14 @@ export default function LoanRequestsTab() {
         </Button>
       </div>
 
-      {/* 2. الجدول (الجزء الذي كان مفقوداً) */}
+      {/* 2. الجدول مع إضافة عمود الأبعاد */}
       <div className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden p-6 h-[500px] flex flex-col">
         <AgGridTable
           columnDefs={[
             { field: "fullName", headerName: "اسم المستعير", flex: 1.2, cellClass: "font-bold text-slate-800" },
-            { field: "bookTitle", headerName: "الكتاب المطلوب", flex: 1.5, cellClass: "font-medium text-primary" },
-            { field: "calassCode", headerName: "رمز التصنيف", width: 130 },
+            { field: "bookTitle", headerName: "الكتاب المطلوب", flex: 1.5, cellClass: "font-medium " },
+            { field: "calassCode", headerName: "رمز التصنيف", width: 110 },
+            { field: "dimensions", headerName: "الأبعاد", width: 110, valueFormatter: (p: any) => p.value || "—" },
             { field: "address", headerName: "العنوان", flex: 1 },
             { 
               headerName: "الإجراءات", 

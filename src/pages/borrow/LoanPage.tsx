@@ -1,256 +1,229 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import axios from "axios";
-import { BookOpen, UserPlus, CheckCircle, RefreshCw, Search, Calendar } from "lucide-react";
+import AsyncSelect from "react-select/async";
+import { BookOpen, UserPlus, CheckCircle, RefreshCw, ScanLine, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import AgGridTable from "@/components/library/AgGridTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const inputClass = cn(
-  "w-full px-4 py-3 rounded-xl border-2 border-border text-base transition-all duration-200",
-  "bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary shadow-sm"
+// --- Axios Interceptor ---
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
 );
 
+const customSelectStyles = {
+  control: (base: any, state: any) => ({
+    ...base,
+    borderRadius: "0.75rem",
+    padding: "0.3rem",
+    borderWidth: "2px",
+    borderColor: state.isFocused ? "hsl(var(--primary))" : "hsl(var(--border))",
+    boxShadow: "none",
+    "&:hover": { borderColor: state.isFocused ? "hsl(var(--primary))" : "hsl(var(--border))" },
+    backgroundColor: "hsl(var(--card))",
+  }),
+  placeholder: (base: any) => ({ ...base, color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }),
+};
+
 export default function LoanPage() {
-  const [searchMember, setSearchMember] = useState("");
-  const [searchBook, setSearchBook] = useState("");
-  
-  // البيانات الأساسية للعملية
   const [subscriberNumber, setSubscriberNumber] = useState("");
   const [bookBarcode, setBookBarcode] = useState("");
-
-  const [loans, setLoans] = useState<any[]>([]);
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [selectedBook, setSelectedBook] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [showTable, setShowTable] = useState(false);
 
-  const getAuthHeaders = () => ({
-    Authorization: `Bearer ${localStorage.getItem("token")}`,
-  });
+  const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
-  // 1. جلب سجل الإعارات (Borrow History)
-  const loadLoans = async (mNumber: string) => {
-    if (!mNumber) return;
-    try {
-      const response = await axios.post(
-        "/api/Borrow/Borrow-history",
-        { memberNumber: mNumber, pageNumber: 1, pageSize: 50 },
-        { headers: getAuthHeaders() }
-      );
-      const fetchedLoans = response.data?.data || response.data || [];
-      setLoans(Array.isArray(fetchedLoans) ? fetchedLoans : []);
-      setShowTable(true);
-    } catch (e: any) {
-      console.error("Error fetching history:", e);
-    }
+  const loadMemberOptions = (inputValue: string) => {
+    if (inputValue.length < 1) return Promise.resolve([]);
+    return axios.get(`/api/Subscription/member-names?MemberName=${inputValue}`, { headers: getAuthHeaders() })
+      .then(res => res.data.map((m: any) => ({ label: m.memberName || m.fullName, value: m.memberId })))
+      .catch(() => []);
   };
 
-  // 2. تنفيذ عملية إعارة جديدة (POST)
+  const loadBookOptions = (inputValue: string) => {
+    if (inputValue.length < 1) return Promise.resolve([]);
+    return axios.get(`/api/Book/books/titles?BookTitle=${inputValue}`, { headers: getAuthHeaders() })
+      .then(res => res.data.map((b: any) => ({ label: b.bookTitle || b.title, value: b.bookID })))
+      .catch(() => []);
+  };
+
   const handleFinalLoan = async () => {
-    if (!subscriberNumber || !bookBarcode) {
-      toast.error("بيانات ناقصة", { description: "يرجى إدخال رقم المشترك وباركود الكتاب" });
-      return;
-    }
     setSaving(true);
     try {
       const payload = {
-        memberNumber: subscriberNumber,
-        barcode: bookBarcode,
+        memberID: selectedMember ? parseInt(selectedMember.value) : null,
+        bookID: selectedBook ? parseInt(selectedBook.value) : null,
+        memberNumber: !selectedMember ? subscriberNumber : null,
+        barcode: !selectedBook ? bookBarcode : null
       };
-
-      await axios.post("/api/Borrow/borrow", payload, {
-        headers: getAuthHeaders(),
-      });
-
+      await axios.post("/api/Borrow/borrow", payload, { headers: getAuthHeaders() });
       toast.success("تمت عملية الإعارة بنجاح!");
       setConfirmOpen(false);
-      
-      // تحديث الجدول فوراً بعد الإعارة
-      loadLoans(subscriberNumber);
-      
-      // تصفير حقول الكتاب فقط للاستعداد للإعارة التالية لنفس الشخص
-      setBookBarcode("");
-      setSearchBook("");
-
+      setBookBarcode(""); setSubscriberNumber(""); setSelectedMember(null); setSelectedBook(null);
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "فشلت العملية";
-      toast.error("خطأ", { description: errorMsg });
+      if (error.response?.status !== 401) {
+        toast.error("فشلت العملية", { description: error.response?.data?.message || "تأكد من البيانات" });
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRenew = async (borrowID: number) => {
-    try {
-      await axios.patch(`/api/Borrow/renew/${borrowID}`,
-        {}, 
-        { headers: getAuthHeaders() }
-      );
-      
-      toast.success("تم تجديد الإعارة بنجاح");
-      loadLoans(subscriberNumber); // تحديث التواريخ في الجدول
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "فشل التجديد";
-      toast.error("خطأ", { description: errorMsg });
-    }
-  };
-
-  // تعريف أعمدة الجدول
-  const loanColumns = [
-    {
-      field: "serial",
-      headerName: "الباركود",
-      flex: 1.2,
-      cellRenderer: (p: any) => p.value ? `0000${p.value}00001` : "-",
-    },
-    { field: "bookName", headerName: "عنوان الكتاب", flex: 2 },
-    {
-      field: "borrowDate",
-      headerName: "تاريخ الإعارة",
-      flex: 1,
-      cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-",
-    },
-    {
-      field: "returnDate",
-      headerName: "تاريخ الإرجاع",
-      flex: 1,
-      cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "لم يرجع بعد",
-    },
-    {
-      headerName: "الإجراءات / الحالة",
-      flex: 1.5,
-      cellRenderer: (p: any) => {
-        const isReturned = !!p.data.returnDate;
-        
-        if (isReturned) {
-          return <span className="text-green-600 font-bold">✓ تم الإرجاع</span>;
-        }
-
-        return (
-          <button
-            onClick={() => handleRenew(p.data.id || p.data.borrowID)}
-            className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg text-xs transition-all shadow-md"
-          >
-            <RefreshCw className="w-3 h-3" /> تجديد الإعارة
-          </button>
-        );
-      },
-    },
-  ];
-
   return (
-    <div className="max-w-6xl mx-auto p-4 space-y-6" dir="rtl">
-      {/* العناوين */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-black text-primary">   إعارة كتاب</h1>
-          <p className="text-muted-foreground">ابحث عن المشتركين والكتب لإدارة عمليات الإعارة</p>
-        </div>
-        <button onClick={() => window.location.reload()} className="p-2 hover:bg-slate-100 rounded-full">
-          <RefreshCw className="w-5 h-5 text-slate-400" />
+    <div className="max-w-4xl mx-auto p-6 space-y-8" dir="rtl">
+      {/* Header Section */}
+      <div className="flex justify-between items-end border-b pb-4">
+       <div className="flex items-center gap-4  pb-5 mb-8">
+  <div className="p-3 bg-primary/10 rounded-2xl text-primary flex items-center justify-center border-2 border-primary/20 shadow-inner">
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width="36" 
+      height="36" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2.5" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className="lucide lucide-book-up"
+    >
+      <path d="M4 19.5V15a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4.5"/><path d="M12 9V3"/><path d="m9 6 3-3 3 3"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+    </svg>
+  </div>
+
+  {/* نص الترويسة */}
+  <div>
+    <h1 className="text-4xl font-black text-foreground tracking-tight">إعارة كتاب</h1>
+    <p className="text-muted-foreground mt-1 text-lg">
+      قم بتسجيل عملية إعارة جديدة للمشتركين في المكتبة
+    </p>
+  </div>
+</div>
+        <button onClick={() => window.location.reload()} className="p-3 hover:bg-secondary rounded-xl transition-all border shadow-sm">
+          <RefreshCw className="w-5 h-5 text-muted-foreground" />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* قسم المستعير */}
-        <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4 border-t-4 border-t-primary">
-          <div className="flex items-center gap-2 text-primary font-bold">
-            <UserPlus className="w-5 h-5" /> بيانات المستعير
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Member Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-3 px-1">
+            <div className="p-2 bg-primary/10 rounded-lg"><UserPlus className="w-5 h-5 text-primary" /></div>
+            <h2 className="text-xl font-bold">بيانات المستعير</h2>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 w-5 h-5 text-muted-foreground" />
-            <input 
-              type="text" 
-              placeholder="ابحث عن اسم مشترك..." 
-              className={cn(inputClass, "pl-10")}
-              value={searchMember}
-              onChange={(e) => setSearchMember(e.target.value)}
-            />
-          </div>
-          <input 
-            type="text" 
-            placeholder="رقم المشترك (المعرف)" 
-            value={subscriberNumber} 
-            onChange={(e) => setSubscriberNumber(e.target.value)} 
-            className={cn(inputClass, "bg-slate-50 border-dashed")} 
-          />
-        </div>
-
-        {/* قسم الكتاب */}
-        <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4 border-t-4 border-t-orange-500">
-          <div className="flex items-center gap-2 text-orange-500 font-bold">
-            <BookOpen className="w-5 h-5" /> بيانات الكتاب
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 w-5 h-5 text-muted-foreground" />
-            <input 
-              type="text" 
-              placeholder="ابحث عن عنوان كتاب..." 
-              className={cn(inputClass, "pl-10")}
-              value={searchBook}
-              onChange={(e) => setSearchBook(e.target.value)}
-            />
-          </div>
-          <input 
-            type="text" 
-            placeholder="باركود الكتاب" 
-            value={bookBarcode} 
-            onChange={(e) => setBookBarcode(e.target.value)} 
-            className={cn(inputClass, "bg-slate-50 border-dashed")} 
-          />
-        </div>
-      </div>
-
-      {/* زر تنفيذ الإعارة */}
-      <button 
-        onClick={() => setConfirmOpen(true)} 
-        className="w-full flex items-center justify-center gap-3 py-5 bg-primary text-white rounded-2xl font-black hover:opacity-95 transition-all shadow-xl text-xl"
-      >
-        <CheckCircle className="w-7 h-7" />
-        تأكيد الإعارة  
-      </button>
-
-      {/* جدول السجل */}
-      {showTable && (
-        <div className="bg-card rounded-2xl p-6 border shadow-sm h-[600px] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold flex items-center gap-2 text-primary">
-              <Calendar className="w-5 h-5" /> سجل إعارات المشترك: {subscriberNumber}
-            </h3>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <AgGridTable
-              rowData={loans}
-              columnDefs={loanColumns}
-              pageSize={10}
-              enableRtl={true}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* مودال التأكيد */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="rounded-3xl max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="text-right text-xl font-bold">تأكيد الإعارة</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 text-right">
-            <div className="bg-slate-50 p-4 rounded-2xl border space-y-2">
-              <p className="flex justify-between"><span>اسم المشترك:</span> <strong>{subscriberNumber}</strong></p>
-              <p className="flex justify-between border-t pt-2"><span>عنوان الكتاب:</span> <strong className="text-orange-600">{bookBarcode}</strong></p>
+          <div className={cn("p-6 rounded-3xl border-2 transition-all bg-card shadow-sm space-y-4", selectedMember || subscriberNumber ? "border-primary/30 shadow-md" : "border-border")}>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground mr-2">بحث في السجلات</label>
+              <AsyncSelect
+                cacheOptions
+                styles={customSelectStyles}
+                loadOptions={loadMemberOptions}
+                value={selectedMember}
+                onChange={(opt) => { setSelectedMember(opt); setSubscriberNumber(""); }}
+                placeholder="ابحث عن اسم المشترك..."
+              />
+            </div>
+            <div className="relative flex items-center py-2">
+              <div className="flex-grow border-t border-dashed"></div>
+              <span className="flex-shrink mx-4 text-xs text-muted-foreground font-bold">أو أدخل الرقم يدوياً</span>
+              <div className="flex-grow border-t border-dashed"></div>
+            </div>
+            <div className="relative">
+              <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/50" />
+              <input 
+                type="text" className="w-full pl-12 pr-4 py-3 rounded-xl border-2 bg-background focus:border-primary focus:outline-none transition-all"
+                value={subscriberNumber}
+                onChange={(e) => { setSubscriberNumber(e.target.value); setSelectedMember(null); }}
+                placeholder="رقم المشترك (Barcode)"
+              />
             </div>
           </div>
-          <DialogFooter className="flex gap-2">
-            <button onClick={() => setConfirmOpen(false)} className="flex-1 py-3 rounded-xl border font-medium">إلغاء</button>
-            <button 
-              onClick={handleFinalLoan} 
-              disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-primary text-white font-bold disabled:opacity-50"
-            >
-              {saving ? "جاري المعالجة..." : "تأكيد الإعارة ✅"}
-            </button>
-          </DialogFooter>
+        </section>
+
+        {/* Book Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-3 px-1">
+            <div className="p-2 bg-orange-500/10 rounded-lg"><BookOpen className="w-5 h-5 text-orange-500" /></div>
+            <h2 className="text-xl font-bold">بيانات الكتاب</h2>
+          </div>
+          <div className={cn("p-6 rounded-3xl border-2 transition-all bg-card shadow-sm space-y-4", selectedBook || bookBarcode ? "border-orange-500/30 shadow-md" : "border-border")}>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground mr-2">بحث بالعنوان</label>
+              <AsyncSelect
+                cacheOptions
+                styles={customSelectStyles}
+                loadOptions={loadBookOptions}
+                value={selectedBook}
+                onChange={(opt) => { setSelectedBook(opt); setBookBarcode(""); }}
+                placeholder="ابحث عن عنوان الكتاب..."
+              />
+            </div>
+            <div className="relative flex items-center py-2">
+              <div className="flex-grow border-t border-dashed"></div>
+              <span className="flex-shrink mx-4 text-xs text-muted-foreground font-bold">أو استخدم الماسح</span>
+              <div className="flex-grow border-t border-dashed"></div>
+            </div>
+            <div className="relative">
+              <ScanLine className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/50" />
+              <input 
+                type="text" className="w-full pl-12 pr-4 py-3 rounded-xl border-2 bg-background focus:border-orange-500 focus:outline-none transition-all"
+                value={bookBarcode}
+                onChange={(e) => { setBookBarcode(e.target.value); setSelectedBook(null); }}
+                placeholder="باركود الكتاب..."
+              />
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* Submit Button */}
+      <button 
+        onClick={() => setConfirmOpen(true)} 
+        disabled={(!selectedMember && !subscriberNumber) || (!selectedBook && !bookBarcode)}
+        className="group relative w-full py-5 bg-primary text-primary-foreground rounded-2xl font-black shadow-lg shadow-primary/20 hover:shadow-xl hover:scale-[1.01] transition-all disabled:opacity-50 disabled:grayscale disabled:hover:scale-100 overflow-hidden"
+      >
+        <div className="relative z-10 flex items-center justify-center gap-3 text-xl">
+          <CheckCircle className="w-7 h-7" />
+          تأكيد وإتمام عملية الإعارة
+        </div>
+        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+      </button>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="rounded-[2rem] max-w-md border-none shadow-2xl overflow-hidden p-0" dir="rtl">
+          <div className="bg-primary p-6 text-white text-center">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white/30">
+              <CheckCircle className="w-10 h-10" />
+            </div>
+            <DialogTitle className="text-2xl font-black text-center text-white">مراجعة الإعارة</DialogTitle>
+          </div>
+          <div className="p-8 space-y-4 bg-background">
+            <div className="grid grid-cols-3 items-center gap-4 p-4 rounded-2xl bg-secondary/50 border">
+               <span className="text-muted-foreground text-sm font-bold">المستعير</span>
+               <b className="col-span-2 text-left truncate">{selectedMember?.label || subscriberNumber}</b>
+            </div>
+            <div className="grid grid-cols-3 items-center gap-4 p-4 rounded-2xl bg-secondary/50 border">
+               <span className="text-muted-foreground text-sm font-bold">الكتاب</span>
+               <b className="col-span-2 text-left truncate">{selectedBook?.label || bookBarcode}</b>
+            </div>
+            
+            <div className="flex gap-3 pt-4">
+              <button onClick={() => setConfirmOpen(false)} className="flex-1 py-4 rounded-xl font-bold hover:bg-secondary transition-colors border-2">تراجع</button>
+              <button onClick={handleFinalLoan} disabled={saving} className="flex-1 py-4 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/30">
+                {saving ? "جاري الإرسال..." : "إتمام الآن"}
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

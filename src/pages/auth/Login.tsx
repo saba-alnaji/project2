@@ -15,39 +15,42 @@ export default function Login() {
 
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+ const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const response = await fetch("/api/Auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
+  try {
+    const response = await fetch("/api/Auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userName: username,
+        password: password,
+        role: "",     
+      }),
+    });
 
-      const data = await response.json().catch(() => null);
+    const data = await response.json().catch(() => null);
 
-      if (!response.ok) {
-        toast.error(data?.message || "فشل تسجيل الدخول");
-        return;
-      }
-localStorage.setItem("token", data.token);
-localStorage.setItem("loginTime", Date.now().toString());
-toast.success("تم تسجيل الدخول بنجاح");
-navigate("/", { replace: true });
-
-    } catch (error) {
-      toast.error("خطأ في الاتصال بالسيرفر");
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      // نصيحة: تأكدي من مخرجات السيرفر، ربما الخطأ في كلمة userName
+      toast.error(data?.message || "فشل تسجيل الدخول");
+      return;
     }
-  };
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("loginTime", Date.now().toString());
+    toast.success("تم تسجيل الدخول بنجاح");
+    navigate("/", { replace: true });
+
+  } catch (error) {
+    toast.error("خطأ في الاتصال بالسيرفر");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden" dir="rtl">

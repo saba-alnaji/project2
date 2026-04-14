@@ -60,7 +60,7 @@ export default function EditSubscriptionPage() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post("/api/Subscription/search",
-        { [searchType]: searchQuery.trim(), pageNumber: 1, pageSize: 1 },
+        { [searchType]: searchQuery.trim(),status: "Active", pageNumber: 1, pageSize: 1 },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 

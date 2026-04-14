@@ -145,7 +145,6 @@ const showUserCredentials = (userName: string, password: string) => {
       confirmButton: 'px-8 py-2 rounded-xl' 
     }
   }).then(() => {
-    // ✅ بس رجعي الزر طبيعي
     setIsSubmitting(false);
   });
 };
@@ -164,10 +163,8 @@ const handleFormSubmit = async (data: SubscriptionFormData) => {
       const userName = result.userName || result.$value?.userName;
       const password = result.password || result.$value?.password;
 
-      // ✅ أول إشي: سكري المودال
       resetForm();
 
-      // ✅ بعده: افرجي السويت اليرت
       if (userName) {
         showUserCredentials(userName, password);
       }
@@ -288,7 +285,7 @@ const handleFormSubmit = async (data: SubscriptionFormData) => {
 
           {/* تاريخ البداية */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">تاريخ بداية الاشتراك (تلقائي)</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">تاريخ بداية الاشتراك (تلقائي)<span className="text-destructive">*</span></label>
             <Controller
               name="startDate"
               control={control}
@@ -300,7 +297,7 @@ const handleFormSubmit = async (data: SubscriptionFormData) => {
 
           {/* تاريخ النهاية */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">تاريخ نهاية الاشتراك (تلقائي)</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">تاريخ نهاية الاشتراك (تلقائي)<span className="text-destructive">*</span></label>
             <Controller
               name="endDate"
               control={control}

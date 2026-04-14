@@ -1,5 +1,5 @@
-import { Toaster } from "@/components/ui/toaster"; // الـ Toast القديم (احتفظ به حالياً)
-import { Toaster as Sonner } from "@/components/ui/sonner"; // الـ Sonner الجديد
+import { Toaster } from "@/components/ui/toaster"; 
+import { Toaster as Sonner } from "@/components/ui/sonner"; 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router-dom";

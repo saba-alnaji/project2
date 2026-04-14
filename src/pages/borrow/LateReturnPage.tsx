@@ -86,7 +86,7 @@ export default function LateLoanPage() {
       toast.success("تم تمديد الإعارة بنجاح");
       setRenewModal(null);
       loadInitialData();
-    } catch (e) { toast.error("فشل في التجديد"); } 
+    } catch (e) { toast.error("فشل في التجديد"); }
     finally { setSaving(false); }
   };
 
@@ -106,7 +106,7 @@ export default function LateLoanPage() {
       toast.success("تم إرجاع الكتاب بنجاح");
       setReturnModal(null);
       loadInitialData();
-    } catch (e) { toast.error("خطأ أثناء الإرجاع"); } 
+    } catch (e) { toast.error("خطأ أثناء الإرجاع"); }
     finally { setSaving(false); }
   };
 
@@ -122,28 +122,30 @@ export default function LateLoanPage() {
   const actionCellRenderer = (params: any) => (
     <div className="flex gap-2 justify-center items-center h-full">
       <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 h-8 font-bold" onClick={() => {
-          setReturnModal(params.data);
-          setReturnForm({ bookConditionID: 0, fineAmount: 0, fineTypeID: 0, note: "" });
-        }}>
+        setReturnModal(params.data);
+        setReturnForm({ bookConditionID: 0, fineAmount: 0, fineTypeID: 0, note: "" });
+      }}>
         <CheckCircle className="w-3.5 h-3.5 ml-1" /> إرجاع
       </Button>
-      <Button size="sm" variant="outline" className="border-amber-500 text-amber-600 h-8 font-bold" onClick={() => setRenewModal(params.data)}>
+      <Button size="sm" variant="outline" className="border-amber-500 text-amber-600 h-8 hover:bg-amber-600 font-bold" onClick={() => setRenewModal(params.data)}>
         <RefreshCw className="w-3.5 h-3.5 ml-1" /> تجديد
       </Button>
     </div>
   );
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-br from-rose-50/40 to-orange-50/40" dir="rtl">
+<div className="min-h-screen p-6 bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-950 dark:to-slate-900 transition-colors duration-300" dir="rtl">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto">
 
         {/* Header & Stats */}
         <div className="flex flex-col lg:flex-row justify-between mb-8 gap-4 items-start lg:items-center">
           <div>
-            <h1 className="text-4xl font-black text-slate-800 flex items-center gap-3">
+            {/* تم إضافة dark:text-slate-100 لجعل الخط أبيض في النايت مود */}
+            <h1 className="text-4xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
               <AlertTriangle className="w-10 h-10 text-rose-500" /> إعارات متأخرة
             </h1>
-            <p className="text-slate-500 mt-1 mr-14">إدارة الكتب التي تجاوزت فترة الإعارة المسموحة</p>
+            {/* تم إضافة dark:text-slate-400 هنا أيضاً */}
+            <p className="text-slate-500 dark:text-slate-400 mt-1 mr-14 font-medium">إدارة الكتب التي تجاوزت فترة الإعارة المسموحة</p>
           </div>
 
           <div className="flex gap-3">
@@ -159,7 +161,8 @@ export default function LateLoanPage() {
         </div>
 
         {/* Main Table Container */}
-        <div className={cn(glassCardClass, "bg-card p-6 h-[750px] flex flex-col")}>
+        {/* تم إزالة bg-white و bg-card واستبدالها بـ dark:bg-slate-900/40 ليتناسق اللون */}
+        <div className={cn(glassCardClass, "p-6 h-[550px] flex flex-col bg-white/50 dark:bg-slate-900/40 border-none shadow-2xl")}>
           <AgGridTable
             columnDefs={[
               { field: "memberNumber", headerName: "رقم المشترك", width: 120, filter: true },
@@ -178,15 +181,43 @@ export default function LateLoanPage() {
         {/* Dialogs: Renew & Return */}
         <Dialog open={!!renewModal} onOpenChange={() => setRenewModal(null)}>
           <DialogContent className={glassCardClass}>
-            <DialogHeader><DialogTitle className="text-amber-600 flex gap-2"><RefreshCw /> تأكيد التجديد</DialogTitle></DialogHeader>
-            <div className="py-6 text-center text-lg">تجديد إعارة <b>{renewModal?.bookTitle}</b>؟</div>
-            <DialogFooter className="gap-3">
-              <Button variant="outline" onClick={() => setRenewModal(null)}>إلغاء</Button>
-              <Button className="bg-amber-500 text-white" onClick={handleRenew} disabled={saving}>تأكيد التجديد</Button>
+            <DialogHeader>
+              <DialogTitle className="text-amber-600 flex gap-2 items-center text-xl font-bold">
+                <RefreshCw className="w-5 h-5" />
+                تأكيد التجديد
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-6 text-center space-y-3">
+              <p className="text-lg">
+                تجديد إعارة <b>{renewModal?.bookTitle}</b>؟
+              </p>
+
+              {/* الجملة المطلوبة بشكل بسيط ومباشر */}
+              <p className="text-sm text-amber-700 font-medium bg-amber-50 p-2 rounded-lg inline-block">
+                (سيتم تمديد موعد الإرجاع لمدة 14 يوماً من التاريخ الحالي)
+              </p>
+            </div>
+
+            <DialogFooter className="gap-3 sm:justify-center">
+              <Button
+                variant="outline"
+                className="px-5 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300 transition-colors" // هوفر برتقالي فاتح للإلغاء
+                onClick={() => setRenewModal(null)}
+              >
+                إلغاء
+              </Button>
+
+              <Button
+                className="bg-amber-500 text-white hover:bg-amber-600 shadow-md transition-colors" // هوفر برتقالي غامق للتأكيد
+                onClick={handleRenew}
+                disabled={saving}
+              >
+                {saving ? "جاري التجديد..." : "تأكيد التجديد"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
         <Dialog open={!!returnModal} onOpenChange={() => setReturnModal(null)}>
           <DialogContent className={cn(glassCardClass, "p-0 overflow-hidden max-w-lg border-none")}>
             <div className="bg-emerald-600 p-4 text-white">

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, RotateCcw, Save, Wallet} from "lucide-react";
+import { Search, RefreshCw, CheckCircle, UserCheck, BookOpen, CreditCard, RotateCcw, Save, Wallet } from "lucide-react";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -111,7 +111,7 @@ export default function RenewSubscriptionPage() {
       const body = {
         idNumber: searchType === "idNumber" ? searchQuery.trim() : null,
         memberNumber: searchType === "memberNumber" ? searchQuery.trim() : null,
-        status: null
+        status: "Active"
       };
 
       const resSearch = await axios.post("/api/Subscription/search", body, {
@@ -121,7 +121,9 @@ export default function RenewSubscriptionPage() {
       const data = Array.isArray(resSearch.data) ? resSearch.data[0] : resSearch.data;
 
       if (!data || !data.memberInfo) {
-        toast.error("عذراً، المشترك غير موجود"); return;
+        // في حال رجع 200 لكن الداتا فارغة
+        toast.error("عذراً، لم يتم العثور على بيانات لهذا المشترك");
+        return;
       }
 
       const [resPayments, resLoans] = await Promise.all([
@@ -138,7 +140,10 @@ export default function RenewSubscriptionPage() {
 
       toast.success("تم جلب بيانات المشترك بنجاح");
     } catch (e: any) {
-      toast.error("حدث خطأ أثناء البحث");
+      // --- التعديل هنا لجلب الرسالة من الباك إند ---
+      const serverMessage = e.response?.data?.message || e.response?.data || "حدث خطأ أثناء البحث";
+      toast.error(serverMessage);
+      // ------------------------------------------
     } finally {
       setSearching(false);
     }
@@ -178,13 +183,14 @@ export default function RenewSubscriptionPage() {
     { field: "serial", headerName: "رقم التسلسل", flex: 0.7 },
     { field: "bookName", headerName: "عنوان الكتاب", flex: 2 },
     { field: "borrowDate", headerName: "تاريخ الإعارة", flex: 1, cellRenderer: (p: any) => p.value ? new Date(p.value).toLocaleDateString('ar-EG') : "-" },
-    { field: "returnDate", headerName: "تاريخ الإرجاع", flex: 1, cellRenderer: (p: any) => {
-      if (p.value) {
-        return new Date(p.value).toLocaleDateString('ar-EG');
+    {
+      field: "returnDate", headerName: "تاريخ الإرجاع", flex: 1, cellRenderer: (p: any) => {
+        if (p.value) {
+          return new Date(p.value).toLocaleDateString('ar-EG');
+        }
+        return <span className="text-green-600 font-bold">قيد الإعارة</span>;
       }
-      return <span className="text-green-600 font-bold">قيد الإعارة</span>;
-    }
-  },    { field: "createdBy", headerName: "الموظف", flex: 1 },
+    }, { field: "createdBy", headerName: "الموظف", flex: 1 },
   ];
 
   return (
@@ -200,47 +206,47 @@ export default function RenewSubscriptionPage() {
         </div>
       </div>
 
-     {/* قسم البحث */}
-<div className="bg-white rounded-2xl p-4 border border-slate-200 mb-8 shadow-sm flex flex-col md:flex-row gap-3">
-  <input
-    type="text"
-    value={searchQuery}
-    onChange={(e) => setSearchQuery(e.target.value)}
-    // إضافة هذا الجزء هنا
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        handleSearch();
-      }
-    }}
-    placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
-    className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-100 focus:border-primary outline-none"
-  />
-  
-  <select
-    value={searchType}
-    onChange={(e) => setSearchType(e.target.value as any)}
-    className="md:w-48 px-4 py-3 rounded-xl border-2 border-slate-100 font-bold text-primary bg-slate-50 outline-none cursor-pointer"
-  >
-    <option value="idNumber">رقم الهوية</option>
-    <option value="memberNumber">رقم المشترك</option>
-  </select>
+      {/* قسم البحث */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 mb-8 shadow-sm flex flex-col md:flex-row gap-3">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          // إضافة هذا الجزء هنا
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              handleSearch();
+            }
+          }}
+          placeholder={searchType === "idNumber" ? "أدخل رقم الهوية..." : "أدخل رقم المشترك..."}
+          className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-100 focus:border-primary outline-none"
+        />
 
-  <button
-    onClick={handleSearch}
-    disabled={searching}
-    className="px-10 py-3 rounded-xl bg-primary text-white font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-  >
-    {searching ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-    بحث
-  </button>
-</div>
+        <select
+          value={searchType}
+          onChange={(e) => setSearchType(e.target.value as any)}
+          className="md:w-48 px-4 py-3 rounded-xl border-2 border-slate-100 font-bold text-primary bg-slate-50 outline-none cursor-pointer"
+        >
+          <option value="idNumber">رقم الهوية</option>
+          <option value="memberNumber">رقم المشترك</option>
+        </select>
+
+        <button
+          onClick={handleSearch}
+          disabled={searching}
+          className="px-10 py-3 rounded-xl bg-primary text-white font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+        >
+          {searching ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+          بحث
+        </button>
+      </div>
 
       {success ? (
         <div className="text-center py-12 bg-card rounded-2xl border border-border shadow-md">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-4">تمت عملية التجديد بنجاح!</h2>
-          <button 
-            onClick={() => { setSuccess(false); setSubscriber(null); reset(); setSearchQuery(""); }} 
+          <button
+            onClick={() => { setSuccess(false); setSubscriber(null); reset(); setSearchQuery(""); }}
             className="px-8 py-3 bg-primary text-white rounded-xl font-bold"
           >
             تجديد لمشترك آخر
@@ -248,7 +254,7 @@ export default function RenewSubscriptionPage() {
         </div>
       ) : subscriber && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 pb-10">
-          
+
           {/* كارت معلومات المشترك */}
           <div className="bg-card rounded-2xl p-6 border-2 border-primary/10 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -379,6 +385,7 @@ export default function RenewSubscriptionPage() {
                 title={`سجل مدفوعات: ${subscriber.memberInfo?.firstName}`}
               />
             </div>
+            
           </div>
 
           <div className="bg-card rounded-2xl p-6 border border-border h-[500px] shadow-sm flex flex-col transition-all">

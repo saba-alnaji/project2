@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import AgGridTable from "@/components/library/AgGridTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { BookOpen, CheckCircle, RefreshCw, AlertCircle, MessageSquare } from "lucide-react";
@@ -54,32 +54,32 @@ export default function ReturnLoanPage() {
     note: "",
   });
 
- const loadInitialData = async () => {
-  try {
-    const [loansData, conditions, fines] = await Promise.all([
-      apiFetch("/api/Borrow/list?status=Active"),
-      apiFetch("/api/BookCondition"), // تأكد أن هذا الرابط يعيد بيانات في السيرفر المرفوع
-      apiFetch("/api/FineType"),
-    ]);
+  const loadInitialData = async () => {
+    try {
+      const [loansData, conditions, fines] = await Promise.all([
+        apiFetch("/api/Borrow/list?status=Active"),
+        apiFetch("/api/BookCondition"), // تأكد أن هذا الرابط يعيد بيانات في السيرفر المرفوع
+        apiFetch("/api/FineType"),
+      ]);
 
-    // حفظ الإعارات للجدول
-    setLoans(loansData || []);
-    
-    // **هذه الأسطر هي التي ستجعل القوائم المنسدلة تظهر**
-    setBookConditions(conditions || []); 
-    setFineTypes(fines || []);
+      // حفظ الإعارات للجدول
+      setLoans(loansData || []);
 
-    setStats({
-      total: (loansData || []).length,
-      today: (loansData || []).filter((l: any) => 
-        new Date(l.startDate).toDateString() === new Date().toDateString()
-      ).length,
-    });
-  } catch (error) {
-    console.error("Error loading data:", error);
-    toast.error("فشل في جلب البيانات من السيرفر");
-  }
-};
+      // **هذه الأسطر هي التي ستجعل القوائم المنسدلة تظهر**
+      setBookConditions(conditions || []);
+      setFineTypes(fines || []);
+
+      setStats({
+        total: (loansData || []).length,
+        today: (loansData || []).filter((l: any) =>
+          new Date(l.startDate).toDateString() === new Date().toDateString()
+        ).length,
+      });
+    } catch (error) {
+      console.error("Error loading data:", error);
+      toast.error("فشل في جلب البيانات من السيرفر");
+    }
+  };
 
   useEffect(() => { loadInitialData(); }, []);
 
@@ -90,7 +90,7 @@ export default function ReturnLoanPage() {
       toast.success("تم التمديد بنجاح");
       setRenewModal(null);
       loadInitialData();
-    } catch (e) { toast.error("فشل التجديد"); } 
+    } catch (e) { toast.error("فشل التجديد"); }
     finally { setSaving(false); }
   };
 
@@ -110,19 +110,19 @@ export default function ReturnLoanPage() {
       toast.success("تم الإرجاع بنجاح");
       setReturnModal(null);
       loadInitialData();
-    } catch (e) { toast.error("خطأ في الإرجاع"); } 
+    } catch (e) { toast.error("خطأ في الإرجاع"); }
     finally { setSaving(false); }
   };
 
   const actionCellRenderer = (params: any) => (
     <div className="flex gap-2 justify-center items-center h-full">
       <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 h-8" onClick={() => {
-          setReturnModal(params.data);
-          setReturnForm({ bookConditionID: 0, fineAmount: 0, fineTypeID: 0, note: "" });
-        }}>
+        setReturnModal(params.data);
+        setReturnForm({ bookConditionID: 0, fineAmount: 0, fineTypeID: 0, note: "" });
+      }}>
         <CheckCircle className="w-3.5 h-3.5 ml-1" /> إرجاع
       </Button>
-      <Button size="sm" variant="outline" className="border-amber-500 text-amber-600 h-8" onClick={() => setRenewModal(params.data)}>
+      <Button size="sm" variant="outline" className="border-amber-500 text-amber-600 h-8 hover:bg-amber-600" onClick={() => setRenewModal(params.data)}>
         <RefreshCw className="w-3.5 h-3.5 ml-1" /> تجديد
       </Button>
     </div>
@@ -131,7 +131,7 @@ export default function ReturnLoanPage() {
   return (
     <div className="min-h-screen p-6" dir="rtl">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto">
-        
+
         {/* Header */}
         <div className="flex justify-between mb-8 items-center">
           <div>
@@ -153,7 +153,7 @@ export default function ReturnLoanPage() {
         </div>
 
         {/* الجدول مباشرة بدون قسم البحث العلوي */}
-        <div className={cn(glassCardClass, "bg-card p-6 h-[700px] flex flex-col")}>
+        <div className={cn(glassCardClass, "bg-card p-6 h-[600px] flex flex-col")}>
           <AgGridTable
             columnDefs={[
               { field: "memberNumber", headerName: "رقم المشترك", flex: 1, filter: true },
@@ -171,9 +171,41 @@ export default function ReturnLoanPage() {
         {/* Modals (Return & Renew) - نفس الكود السابق للمودالات */}
         <Dialog open={!!renewModal} onOpenChange={() => setRenewModal(null)}>
           <DialogContent className={glassCardClass}>
-            <DialogHeader><DialogTitle className="text-amber-600 flex gap-2"><RefreshCw /> تأكيد التجديد</DialogTitle></DialogHeader>
-            <div className="py-6 text-center text-lg">تجديد إعارة <b>{renewModal?.bookTitle}</b>؟</div>
-            <DialogFooter><Button variant="outline" onClick={() => setRenewModal(null)}>إلغاء</Button><Button className="bg-amber-500 text-white" onClick={handleRenew} disabled={saving}>تأكيد</Button></DialogFooter>
+            <DialogHeader>
+              <DialogTitle className="text-amber-600 flex gap-2 items-center text-xl font-bold">
+                <RefreshCw className="w-5 h-5" />
+                تأكيد التجديد
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-6 text-center space-y-3">
+              <p className="text-lg">
+                تجديد إعارة <b>{renewModal?.bookTitle}</b>؟
+              </p>
+
+              {/* الجملة المطلوبة بشكل بسيط ومباشر */}
+              <p className="text-sm text-amber-700 font-medium bg-amber-50 p-2 rounded-lg inline-block">
+                (سيتم تمديد موعد الإرجاع لمدة 14 يوماً من التاريخ الحالي)
+              </p>
+            </div>
+
+            <DialogFooter className="gap-3 sm:justify-center">
+              <Button
+                variant="outline"
+                className="px-5 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300 transition-colors" // هوفر برتقالي فاتح للإلغاء
+                onClick={() => setRenewModal(null)}
+              >
+                إلغاء
+              </Button>
+
+              <Button
+                className="bg-amber-500 text-white hover:bg-amber-600 shadow-md transition-colors" // هوفر برتقالي غامق للتأكيد
+                onClick={handleRenew}
+                disabled={saving}
+              >
+                {saving ? "جاري التجديد..." : "تأكيد التجديد"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
