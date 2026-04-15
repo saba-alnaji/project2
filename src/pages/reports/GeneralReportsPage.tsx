@@ -185,15 +185,7 @@ export default function GeneralReportsPage() {
           </div>
         </div>
 
-        {/* زر التصدير */}
-        <button
-          onClick={handleExportExcel}
-          disabled={exportLoading}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-lg hover:shadow-green-900/20 active:scale-95"
-        >
-          {exportLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-          تصدير إكسل
-        </button>
+        
       </div>
 
       {/* Tabs */}
@@ -219,76 +211,90 @@ export default function GeneralReportsPage() {
           <h3 className="text-2xl font-bold text-foreground mt-4">جاري تحميل التقارير...</h3>
         </div>
       ) : (
-        <div className="bg-card rounded-3xl shadow-xl border border-border overflow-hidden p-6 print:p-0">
-          <div className="h-[700px]">
-            <AgGridTable
-              key={tab}
-              columnDefs={
-                tab === "loans" ? [
-                  { field: "memberIdNumber", headerName: "رقم الهوية", flex: 1, minWidth: 120 },
-                  { field: "memberName", headerName: "اسم المشترك", flex: 1.2, minWidth: 150 },
-                  { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.5, minWidth: 200 },
-                  { field: "serialNumber", headerName: "رقم التسلسل", flex: 1, minWidth: 130 },
-                  { field: "authors", headerName: "المؤلفون", flex: 1.2, minWidth: 150 },
-                  { field: "startDate", headerName: "تاريخ الإعارة", flex: 1, minWidth: 120, valueFormatter: dateValueFormatter },
-                  { field: "endDate", headerName: "تاريخ الإرجاع", flex: 1, minWidth: 120, valueFormatter: dateValueFormatter },
-                ] : tab === "subscribers" ? [
-                  { field: "memberIdNumber", headerName: "رقم الهوية", flex: 1, minWidth: 120 },
-                  { field: "memberName", headerName: "اسم المشترك", flex: 2, minWidth: 200 },
-                  { field: "subscriptionDate", headerName: "تاريخ الاشتراك", flex: 1, minWidth: 150, valueFormatter: dateValueFormatter },
-                  { field: "subscriptionDuration", headerName: "مدة الاشتراك (يوم)", flex: 1, minWidth: 130, valueFormatter: (params: any) => params.value ? `${params.value} يوم` : "—" },
-                ] : [
-                  { field: "memberIdNumber", headerName: "رقم الهوية", flex: 1, minWidth: 120 },
-                  { field: "memberName", headerName: "اسم المشترك", flex: 1.2, minWidth: 150 },
-                  { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.5, minWidth: 180 },
-                  { field: "serialNumber", headerName: "الرقم التسلسلي", flex: 1, minWidth: 130 },
-                  { field: "authors", headerName: "المؤلفون", flex: 1.2, minWidth: 150 },
-                  { field: "startDate", headerName: "تاريخ البداية", flex: 1, valueFormatter: dateValueFormatter },
-                  { field: "endDate", headerName: "تاريخ النهاية", flex: 1, valueFormatter: dateValueFormatter },
-                  { field: "lateDays", headerName: "أيام التأخير", flex: 0.8, minWidth: 100, cellClass: "text-red-500 font-bold", valueFormatter: (params: any) => params.value ? `${params.value} يوم` : "0 يوم" },
-                ]
-              }
-              rowData={tab === "loans" ? loanData : tab === "subscribers" ? subData : lateData}
-              title={tabs.find(t => t.id === tab)?.label}
-              onFetchAll={fetchAllForReport}
-              pagination={false}
-            />
-          </div>
+       <div className="bg-card rounded-3xl shadow-xl border border-border overflow-hidden p-6 print:p-0">
+  
+  {/* الجزء المعدل: حاوية لترتيب زر التصدير في جهة اليسار (أو اليمين حسب الـ RTL) مع مسافة أسفلها */}
+  <div className="flex justify-end items-center gap-3 mb-4 print:hidden">
+    <button
+      onClick={handleExportExcel}
+      disabled={exportLoading}
+      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white px-6 py-2.5 rounded-2xl font-bold transition-all shadow-lg hover:shadow-green-900/20 active:scale-95"
+    >
+      {exportLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+      تصدير إكسل
+    </button>
+  </div>
 
-          {/* Custom Pagination UI */}
-          <div className="flex flex-col items-center gap-4 mt-6 print:hidden">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-xl bg-secondary disabled:opacity-50"
-              >
-                السابق
-              </button>
-              <div className="flex gap-1">
-                {getPageNumbers().map((p, i) => (
-                  <button
-                    key={i}
-                    onClick={() => typeof p === 'number' && setCurrentPage(p)}
-                    className={`w-10 h-10 rounded-lg border ${currentPage === p ? "bg-primary text-white" : "bg-white"}`}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 rounded-xl bg-secondary disabled:opacity-50"
-              >
-                التالي
-              </button>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              عرض {Math.min(totalRows, (currentPage - 1) * pageSize + 1)} إلى {Math.min(totalRows, currentPage * pageSize)} من أصل {totalRows} سجل
-            </div>
-          </div>
-        </div>
+  <div className="h-[700px]">
+    <AgGridTable
+      key={tab}
+      columnDefs={
+        tab === "loans" ? [
+          { field: "memberIdNumber", headerName: "رقم الهوية", flex: 1, minWidth: 120 },
+          { field: "memberName", headerName: "اسم المشترك", flex: 1.2, minWidth: 150 },
+          { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.5, minWidth: 200 },
+          { field: "serialNumber", headerName: "رقم التسلسل", flex: 1, minWidth: 130 },
+          { field: "authors", headerName: "المؤلفون", flex: 1.2, minWidth: 150 },
+          { field: "startDate", headerName: "تاريخ الإعارة", flex: 1, minWidth: 120, valueFormatter: dateValueFormatter },
+          { field: "endDate", headerName: "تاريخ الإرجاع", flex: 1, minWidth: 120, valueFormatter: dateValueFormatter },
+        ] : tab === "subscribers" ? [
+          { field: "memberIdNumber", headerName: "رقم الهوية", flex: 1, minWidth: 120 },
+          { field: "memberName", headerName: "اسم المشترك", flex: 2, minWidth: 200 },
+          { field: "subscriptionDate", headerName: "تاريخ الاشتراك", flex: 1, minWidth: 150, valueFormatter: dateValueFormatter },
+          { field: "subscriptionDuration", headerName: "مدة الاشتراك (يوم)", flex: 1, minWidth: 130, valueFormatter: (params: any) => params.value ? `${params.value} يوم` : "—" },
+        ] : [
+          { field: "memberIdNumber", headerName: "رقم الهوية", flex: 1, minWidth: 120 },
+          { field: "memberName", headerName: "اسم المشترك", flex: 1.2, minWidth: 150 },
+          { field: "bookTitle", headerName: "عنوان الكتاب", flex: 1.5, minWidth: 180 },
+          { field: "serialNumber", headerName: "الرقم التسلسلي", flex: 1, minWidth: 130 },
+          { field: "authors", headerName: "المؤلفون", flex: 1.2, minWidth: 150 },
+          { field: "startDate", headerName: "تاريخ البداية", flex: 1, valueFormatter: dateValueFormatter },
+          { field: "endDate", headerName: "تاريخ النهاية", flex: 1, valueFormatter: dateValueFormatter },
+          { field: "lateDays", headerName: "أيام التأخير", flex: 0.8, minWidth: 100, cellClass: "text-red-500 font-bold", valueFormatter: (params: any) => params.value ? `${params.value} يوم` : "0 يوم" },
+        ]
+      }
+      rowData={tab === "loans" ? loanData : tab === "subscribers" ? subData : lateData}
+      title={tabs.find(t => t.id === tab)?.label}
+      onFetchAll={fetchAllForReport}
+      pagination={false}
+      showExport={false} 
+    />
+  </div>
+
+  {/* Custom Pagination UI */}
+  <div className="flex flex-col items-center gap-4 mt-6 print:hidden">
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+        disabled={currentPage === 1}
+        className="px-4 py-2 rounded-xl bg-secondary disabled:opacity-50"
+      >
+        السابق
+      </button>
+      <div className="flex gap-1">
+        {getPageNumbers().map((p, i) => (
+          <button
+            key={i}
+            onClick={() => typeof p === 'number' && setCurrentPage(p)}
+            className={`w-10 h-10 rounded-lg border ${currentPage === p ? "bg-primary text-white" : "bg-white"}`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+        disabled={currentPage === totalPages}
+        className="px-4 py-2 rounded-xl bg-secondary disabled:opacity-50"
+      >
+        التالي
+      </button>
+    </div>
+    <div className="text-sm text-muted-foreground">
+      عرض {Math.min(totalRows, (currentPage - 1) * pageSize + 1)} إلى {Math.min(totalRows, currentPage * pageSize)} من أصل {totalRows} سجل
+    </div>
+  </div>
+</div>
       )}
     </div>
   );

@@ -40,18 +40,18 @@ export default function LoanPage() {
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const getAuthHeaders = () => ({ Authorization: Bearer ${localStorage.getItem("token")} });
+  const getAuthHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
   const loadMemberOptions = (inputValue: string) => {
     if (inputValue.length < 1) return Promise.resolve([]);
-    return axios.get(/api/Subscription/member-names?MemberName=${inputValue}, { headers: getAuthHeaders() })
+    return axios.get(`/api/Subscription/member-names?MemberName=${inputValue}`, { headers: getAuthHeaders() })
       .then(res => res.data.map((m: any) => ({ label: m.memberName || m.fullName, value: m.memberId })))
       .catch(() => []);
   };
 
   const loadBookOptions = (inputValue: string) => {
     if (inputValue.length < 1) return Promise.resolve([]);
-    return axios.get(/api/Book/books/titles?BookTitle=${inputValue}, { headers: getAuthHeaders() })
+    return axios.get(`/api/Book/books/titles?BookTitle=${inputValue}`, { headers: getAuthHeaders() })
       .then(res => res.data.map((b: any) => ({ label: b.bookTitle || b.title, value: b.bookID })))
       .catch(() => []);
   };
